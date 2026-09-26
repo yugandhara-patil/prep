@@ -54,7 +54,7 @@ function Profile() {
         setMessage("");
 
         const response = await axios.get(
-          "http://localhost:8081/api/profile",
+         `${import.meta.env.VITE_API_URL}/api/profile`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -215,7 +215,7 @@ function Profile() {
       };
 
       const response = await axios.put(
-        "http://localhost:8081/api/profile",
+       `${import.meta.env.VITE_API_URL}/api/profile`,
         requestBody,
         {
           headers: {

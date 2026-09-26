@@ -38,8 +38,8 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);  const [m
     try {
       setLoading(true);
 
-      await axios.post("http://localhost:8081/api/auth/register", {
-        fullName: formData.fullName,
+await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/register`, {
+          fullName: formData.fullName,
         email: formData.email,
         password: formData.password,
       });
