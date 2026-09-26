@@ -10,6 +10,7 @@ public class StartInterviewResponse {
     private String resumeFileName;
     private String status;
     private String message;
+    private String firstQuestion;
 
     public StartInterviewResponse() {
     }
@@ -22,7 +23,8 @@ public class StartInterviewResponse {
             String technicalFocus,
             String resumeFileName,
             String status,
-            String message
+            String message,
+            String firstQuestion
     ) {
         this.interviewId = interviewId;
         this.interviewType = interviewType;
@@ -32,6 +34,7 @@ public class StartInterviewResponse {
         this.resumeFileName = resumeFileName;
         this.status = status;
         this.message = message;
+        this.firstQuestion = firstQuestion;
     }
 
     public Long getInterviewId() {
@@ -96,5 +99,13 @@ public class StartInterviewResponse {
 
     public void setMessage(String message) {
         this.message = message;
+    }
+
+    public String getFirstQuestion() {
+        return firstQuestion;
+    }
+
+    public void setFirstQuestion(String firstQuestion) {
+        this.firstQuestion = firstQuestion;
     }
 }

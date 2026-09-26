@@ -83,6 +83,7 @@ function StartInterview() {
       setMessage(
         "Please select an interview type."
       );
+
       setLoading(false);
       return;
     }
@@ -91,6 +92,7 @@ function StartInterview() {
       setMessage(
         "Please enter your target role."
       );
+
       setLoading(false);
       return;
     }
@@ -99,6 +101,7 @@ function StartInterview() {
       setMessage(
         "Please select a difficulty level."
       );
+
       setLoading(false);
       return;
     }
@@ -107,57 +110,73 @@ function StartInterview() {
       setMessage(
         "Please upload your resume."
       );
+
       setLoading(false);
       return;
     }
 
     try {
       // =========================
-      // PREPARE FORM DATA
+      // PREPARE INTERVIEW DATA
       // =========================
       const interviewData = {
-  interviewType,
-  targetRole: targetRole.trim(),
-  difficulty,
+        interviewType,
 
-  technicalFocus:
-    interviewType === "Technical"
-      ? technicalFocus.trim()
-      : "",
-};
+        targetRole:
+          targetRole.trim(),
 
-const formData = new FormData();
+        difficulty,
 
-formData.append(
-  "data",
-  new Blob(
-    [JSON.stringify(interviewData)],
-    {
-      type: "application/json",
-    }
-  )
-);
+        technicalFocus:
+          interviewType === "Technical"
+            ? technicalFocus.trim()
+            : "",
+      };
 
-formData.append(
-  "resume",
-  resume
-);
+      // =========================
+      // CREATE FORM DATA
+      // =========================
+      const formData = new FormData();
 
-      // Get token from localStorage or your auth context
-      const token = localStorage.getItem("token");
+      formData.append(
+        "data",
+        new Blob(
+          [
+            JSON.stringify(
+              interviewData
+            ),
+          ],
+          {
+            type: "application/json",
+          }
+        )
+      );
+
+      formData.append(
+        "resume",
+        resume
+      );
+
+      // =========================
+      // GET LOGIN TOKEN
+      // =========================
+      const token =
+        localStorage.getItem("token");
 
       // =========================
       // SEND TO BACKEND
       // =========================
-      const response = await axios.post(
-        "http://localhost:8081/api/interviews/start",
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const response =
+        await axios.post(
+          "http://localhost:8081/api/interviews/start",
+          formData,
+          {
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+            },
+          }
+        );
 
       // =========================
       // BACKEND RESPONSE
@@ -193,13 +212,17 @@ formData.append(
 
           resumeName:
             createdInterview.resumeFileName,
+
+          // Gemini generated question
+          firstQuestion:
+            createdInterview.firstQuestion,
         })
       );
 
       // =========================
       // NEXT PAGE
       // =========================
-      navigate("/choose-interviewer");
+      navigate("/interview");
 
     } catch (error) {
       console.error(
@@ -220,6 +243,7 @@ formData.append(
             "Unable to start interview. Please try again."
         );
       }
+
     } finally {
       setLoading(false);
     }
@@ -227,6 +251,7 @@ formData.append(
 
   return (
     <div className="min-h-screen bg-[#F8F7FC]">
+
       <Navbar />
 
       <main className="mx-auto max-w-5xl px-5 pb-16 pt-8 md:px-8">
@@ -264,7 +289,6 @@ formData.append(
 
           {/* ================= INTERVIEW TYPE ================= */}
 
-          {/* Show selector ONLY when user came from hero */}
           {!preselectedType && (
             <>
               <div>
@@ -283,7 +307,9 @@ formData.append(
                   <button
                     type="button"
                     onClick={() =>
-                      setInterviewType("Technical")
+                      setInterviewType(
+                        "Technical"
+                      )
                     }
                     className={`rounded-[18px] border p-5 text-left transition ${
                       interviewType === "Technical"
@@ -312,7 +338,9 @@ formData.append(
                   <button
                     type="button"
                     onClick={() =>
-                      setInterviewType("HR")
+                      setInterviewType(
+                        "HR"
+                      )
                     }
                     className={`rounded-[18px] border p-5 text-left transition ${
                       interviewType === "HR"
@@ -366,6 +394,7 @@ formData.append(
           )}
 
           {/* ================= TARGET ROLE ================= */}
+
           <div>
 
             <label className="text-lg font-bold text-slate-950">
@@ -393,6 +422,7 @@ formData.append(
           <div className="my-8 border-t border-slate-100" />
 
           {/* ================= DIFFICULTY ================= */}
+
           <div>
 
             <h2 className="text-lg font-bold text-slate-950">
@@ -466,13 +496,13 @@ formData.append(
                 />
 
               </div>
-
             </>
           )}
 
           <div className="my-8 border-t border-slate-100" />
 
           {/* ================= RESUME ================= */}
+
           <div>
 
             <h2 className="text-lg font-bold text-slate-950">
@@ -531,6 +561,7 @@ formData.append(
           </div>
 
           {/* ================= ERROR ================= */}
+
           {message && (
             <p className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
               {message}
@@ -538,14 +569,18 @@ formData.append(
           )}
 
           {/* ================= START BUTTON ================= */}
+
           <div className="mt-8 flex justify-end">
 
             <button
               type="button"
-              onClick={handleStartInterview}
+              onClick={
+                handleStartInterview
+              }
               disabled={loading}
               className="rounded-xl bg-[#6D4DE8] px-7 py-3.5 font-semibold text-white shadow-md shadow-purple-200 transition hover:bg-[#5E3FD1] disabled:cursor-not-allowed disabled:opacity-60"
             >
+
               {loading
                 ? "Creating Interview..."
                 : interviewType === "Technical"
@@ -553,6 +588,7 @@ formData.append(
                 : interviewType === "HR"
                 ? "Start HR Interview"
                 : "Start Interview"}
+
             </button>
 
           </div>
@@ -560,6 +596,7 @@ formData.append(
         </section>
 
       </main>
+
     </div>
   );
 }

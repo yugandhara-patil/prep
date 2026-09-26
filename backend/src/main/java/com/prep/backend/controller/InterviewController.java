@@ -4,11 +4,14 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.prep.backend.dto.AnswerRequest;
+import com.prep.backend.dto.AnswerResponse;
 import com.prep.backend.dto.StartInterviewRequest;
 import com.prep.backend.dto.StartInterviewResponse;
 import com.prep.backend.service.InterviewService;
@@ -24,6 +27,11 @@ public class InterviewController {
     ) {
         this.interviewService = interviewService;
     }
+
+
+    // =========================================================
+    // START INTERVIEW
+    // =========================================================
 
     @PostMapping(
             value = "/start",
@@ -46,6 +54,38 @@ public class InterviewController {
                         email,
                         request,
                         resume
+                );
+
+        return ResponseEntity.ok(response);
+    }
+
+
+    // =========================================================
+    // PROCESS CANDIDATE ANSWER
+    // =========================================================
+
+    @PostMapping(
+            value = "/answer",
+            consumes = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<AnswerResponse> processAnswer(
+            Authentication authentication,
+
+            @RequestBody
+            AnswerRequest request
+    ) {
+
+        String email = authentication.getName();
+
+        String nextQuestion =
+                interviewService.processAnswer(
+                        email,
+                        request
+                );
+
+        AnswerResponse response =
+                new AnswerResponse(
+                        nextQuestion
                 );
 
         return ResponseEntity.ok(response);

@@ -1,33 +1,61 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Navbar from "./Navbar";
+import axios from "axios";
 
-import femaleAvatar from "../assets/final women avtar.mp4";
+import GLBAvatarTest from "./GLBAvatarTest";
 
 function Interview() {
   const navigate = useNavigate();
 
   const [setup, setSetup] = useState(null);
-  const [interviewer, setInterviewer] = useState(null);
+  const [seconds, setSeconds] = useState(0);
 
-  const [interviewStatus, setInterviewStatus] =
-    useState("speaking");
-
-  const [isMicOn, setIsMicOn] =
+  const [isInterviewStarted, setIsInterviewStarted] =
     useState(false);
 
-  const [seconds, setSeconds] =
+  const [currentQuestion, setCurrentQuestion] =
+    useState("");
+
+  const [isSpeaking, setIsSpeaking] =
+    useState(false);
+
+  // =========================
+  // SPEECH RECOGNITION STATE
+  // =========================
+
+  const [isListening, setIsListening] =
+    useState(false);
+
+  const [transcript, setTranscript] =
+    useState("");
+
+  const [isProcessingAnswer, setIsProcessingAnswer] =
+    useState(false);
+
+  const [speechBoundary, setSpeechBoundary] =
     useState(0);
 
-  // TEMPORARY QUESTION
-  // Later this will come from AI/backend
-  const [currentQuestion] = useState(
-    "Tell me about yourself and walk me through your background."
-  );
+  // =========================
+  // REFS
+  // =========================
+
+  const recognitionRef = useRef(null);
+
+  const silenceTimerRef = useRef(null);
+
+  const shouldListenRef = useRef(false);
+
+  const transcriptRef = useRef("");
+
+  const isListeningRef = useRef(false);
+
+  const isInterviewStartedRef =
+    useRef(false);
 
   // =========================
-  // LOAD INTERVIEW DATA
+  // LOAD INTERVIEW SETUP
   // =========================
+
   useEffect(() => {
     const storedSetup =
       sessionStorage.getItem("interviewSetup");
@@ -37,35 +65,67 @@ function Interview() {
       return;
     }
 
-    setSetup(JSON.parse(storedSetup));
+    const parsedSetup =
+      JSON.parse(storedSetup);
 
-    const storedInterviewer =
-      sessionStorage.getItem(
-        "selectedInterviewer"
-      );
+    setSetup(parsedSetup);
 
-    if (storedInterviewer) {
-      setInterviewer(
-        JSON.parse(storedInterviewer)
-      );
-    }
+    setCurrentQuestion(
+      parsedSetup.firstQuestion ||
+        "Unable to load the interview question."
+    );
   }, [navigate]);
+
+  // =========================
+  // KEEP INTERVIEW REF UPDATED
+  // =========================
+
+  useEffect(() => {
+    isInterviewStartedRef.current =
+      isInterviewStarted;
+  }, [isInterviewStarted]);
 
   // =========================
   // TIMER
   // =========================
+
   useEffect(() => {
+    if (!isInterviewStarted) return;
+
     const timer = setInterval(() => {
       setSeconds((prev) => prev + 1);
     }, 1000);
 
     return () => clearInterval(timer);
+  }, [isInterviewStarted]);
+
+  // =========================
+  // CLEAN UP SPEECH
+  // =========================
+
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+
+      shouldListenRef.current = false;
+
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+      }
+
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
   }, []);
 
+  // =========================
+  // FORMAT TIMER
+  // =========================
+
   function formatTime(totalSeconds) {
-    const minutes = Math.floor(
-      totalSeconds / 60
-    );
+    const minutes =
+      Math.floor(totalSeconds / 60);
 
     const remainingSeconds =
       totalSeconds % 60;
@@ -78,299 +138,1044 @@ function Interview() {
     ).padStart(2, "0")}`;
   }
 
-  // =========================
-  // MICROPHONE
-  // =========================
-  function handleMicrophone() {
-    if (isMicOn) {
-      setIsMicOn(false);
-      setInterviewStatus("processing");
+  // =========================================================
+  // START SPEECH RECOGNITION
+  // =========================================================
 
-      /*
-        Later:
+  function startListening() {
+    if (!isInterviewStartedRef.current) {
+      return;
+    }
 
-        1. Stop Speech Recognition
-        2. Get transcript
-        3. Send answer to backend
-        4. AI analyzes answer
-        5. Generate next question
-        6. Avatar speaks next question
-      */
+    if (isSpeaking) {
+      console.log(
+        "Maya is still speaking. Microphone will remain off."
+      );
+      return;
+    }
 
-      setTimeout(() => {
-        setInterviewStatus("speaking");
-      }, 1500);
+    const SpeechRecognition =
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      console.error(
+        "Speech Recognition is not supported in this browser."
+      );
+
+      setTranscript(
+        "Speech recognition is not supported in this browser."
+      );
 
       return;
     }
 
-    setIsMicOn(true);
-    setInterviewStatus("listening");
-  }
+    // Avoid starting twice
+    if (isListeningRef.current) {
+      return;
+    }
 
-  // =========================
-  // END INTERVIEW
-  // =========================
-  function handleEndInterview() {
-    const confirmEnd =
-      window.confirm(
-        "Are you sure you want to end this interview?"
+    // Clear previous answer
+    transcriptRef.current = "";
+    setTranscript("");
+
+    shouldListenRef.current = true;
+
+    const recognition =
+      new SpeechRecognition();
+
+    recognition.continuous = true;
+
+    recognition.interimResults = true;
+
+    recognition.lang = "en-US";
+
+    recognitionRef.current = recognition;
+
+    // =========================
+    // RECOGNITION START
+    // =========================
+
+    recognition.onstart = () => {
+      console.log(
+        "🎙 Speech recognition started"
       );
 
-    if (!confirmEnd) return;
+      isListeningRef.current = true;
+
+      setIsListening(true);
+    };
+
+    // =========================
+    // RECOGNITION RESULTS
+    // =========================
+
+    recognition.onresult = (event) => {
+      let completeTranscript = "";
+
+      for (
+        let i = 0;
+        i < event.results.length;
+        i++
+      ) {
+        completeTranscript +=
+          event.results[i][0].transcript + " ";
+      }
+
+      completeTranscript =
+        completeTranscript.trim();
+
+      console.log(
+        "📝 Transcript:",
+        completeTranscript
+      );
+
+      transcriptRef.current =
+        completeTranscript;
+
+      setTranscript(
+        completeTranscript
+      );
+
+      // =========================
+      // SPEECH BOUNDARY
+      // =========================
+
+      setSpeechBoundary(
+        (previous) => previous + 1
+      );
+
+      // =========================
+      // RESET SILENCE TIMER
+      // =========================
+
+      if (silenceTimerRef.current) {
+        clearTimeout(
+          silenceTimerRef.current
+        );
+      }
+
+      silenceTimerRef.current =
+        setTimeout(() => {
+          console.log(
+            "🤫 Silence detected. Stopping microphone."
+          );
+
+          stopListening();
+        }, 1800);
+    };
+
+    // =========================
+    // RECOGNITION ERROR
+    // =========================
+
+    recognition.onerror = (event) => {
+      console.error(
+        "🎙 Speech recognition error:",
+        event.error
+      );
+
+      if (
+        event.error ===
+        "not-allowed"
+      ) {
+        setTranscript(
+          "Microphone permission was denied. Please allow microphone access."
+        );
+      }
+
+      if (
+        event.error ===
+        "audio-capture"
+      ) {
+        setTranscript(
+          "No microphone was detected."
+        );
+      }
+    };
+
+    // =========================
+    // RECOGNITION END
+    // =========================
+
+    recognition.onend = () => {
+      console.log(
+        "🎙 Speech recognition ended"
+      );
+
+      isListeningRef.current = false;
+
+      setIsListening(false);
+
+      /*
+       * Chrome/Safari can sometimes stop recognition
+       * automatically even when continuous=true.
+       *
+       * If the interview is still active and we did
+       * not intentionally stop listening, start again.
+       */
+
+      if (
+        shouldListenRef.current &&
+        isInterviewStartedRef.current &&
+        !transcriptRef.current
+      ) {
+        setTimeout(() => {
+          if (
+            shouldListenRef.current &&
+            isInterviewStartedRef.current &&
+            !isListeningRef.current
+          ) {
+            startListening();
+          }
+        }, 300);
+      }
+    };
+
+    // =========================
+    // START
+    // =========================
+
+    try {
+      recognition.start();
+
+      console.log(
+        "🎙 Starting microphone..."
+      );
+    } catch (error) {
+      console.error(
+        "Failed to start speech recognition:",
+        error
+      );
+    }
+  }
+
+  // =========================================================
+  // SUBMIT ANSWER TO BACKEND
+  // =========================================================
+
+  async function submitAnswerToBackend() {
+    const answer = transcriptRef.current.trim();
+    console.log("🔥 SUBMIT ANSWER FUNCTION CALLED");
+console.log("Setup:", setup);
+console.log("Interview ID:", setup?.interviewId);
+console.log("Current Question:", currentQuestion);
+console.log("Transcript:", answer);
+
+    if (!answer) {
+      console.log("No answer to submit.");
+      return;
+    }
+
+    if (!setup?.interviewId) {
+      console.error("Interview ID is missing.");
+      return;
+    }
+
+    if (!currentQuestion) {
+      console.error("Current question is missing.");
+      return;
+    }
+
+    if (isProcessingAnswer) {
+      console.log("Answer is already being processed.");
+      return;
+    }
+
+    console.log("================================");
+    console.log("📤 SUBMITTING ANSWER");
+    console.log("Interview ID:", setup.interviewId);
+    console.log("Question:", currentQuestion);
+    console.log("Answer:", answer);
+    console.log("================================");
+
+    setIsProcessingAnswer(true);
+
+    try {
+      const token = localStorage.getItem("token");
+
+     const response = await axios.post(
+  "http://localhost:8081/api/interviews/answer",
+  {
+    interviewId: setup.interviewId,
+    userAnswer: answer,
+    currentQuestion: currentQuestion,
+  },
+  {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  }
+);
+
+      console.log("================================");
+      console.log("✅ BACKEND RESPONSE");
+      console.log(response.data);
+      console.log("================================");
+
+      const nextQuestion =
+        response.data?.nextQuestion;
+
+      if (!nextQuestion) {
+        console.error(
+          "Backend did not return a next question."
+        );
+        return;
+      }
+
+      // Update question on screen
+      setCurrentQuestion(nextQuestion);
+
+      // Clear previous transcript
+      transcriptRef.current = "";
+      setTranscript("");
+
+      // Maya speaks the next question
+      speakQuestion(nextQuestion);
+
+    } catch (error) {
+      console.error(
+        "❌ Failed to submit answer:",
+        error
+      );
+
+      if (error.response) {
+        console.error(
+          "Backend status:",
+          error.response.status
+        );
+
+        console.error(
+          "Backend response:",
+          error.response.data
+        );
+      }
+    } finally {
+      setIsProcessingAnswer(false);
+    }
+  }
+
+  // =========================================================
+  // STOP SPEECH RECOGNITION
+  // =========================================================
+
+  function stopListening() {
+    shouldListenRef.current = false;
+
+    if (silenceTimerRef.current) {
+      clearTimeout(
+        silenceTimerRef.current
+      );
+
+      silenceTimerRef.current = null;
+    }
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.log(
+          "Recognition already stopped."
+        );
+      }
+    }
+
+    isListeningRef.current = false;
+
+    setIsListening(false);
+
+    console.log(
+      "🎙 Microphone stopped"
+    );
+
+    // ==========================================
+    // SUBMIT FINAL ANSWER
+    // ==========================================
+
+    if (transcriptRef.current.trim()) {
+      submitAnswerToBackend();
+    }
+  }
+
+  // =========================================================
+  // MAYA TEXT TO SPEECH
+  // =========================================================
+
+  function speakQuestion(text) {
+    if (!text) {
+      console.log(
+        "No question to speak."
+      );
+
+      return;
+    }
+
+    // Make absolutely sure microphone is OFF
+    shouldListenRef.current = false;
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.log(
+          "Recognition already stopped."
+        );
+      }
+    }
+
+    isListeningRef.current = false;
+
+    setIsListening(false);
+
+    // Stop any previous speech
+    window.speechSynthesis.cancel();
+
+    // Make sure speech engine is active
+    window.speechSynthesis.resume();
+
+    const speech =
+      new SpeechSynthesisUtterance();
+
+    // =========================
+    // TEXT
+    // =========================
+
+    speech.text = text;
+
+    // =========================
+    // FIND CLEAR ENGLISH VOICE
+    // =========================
+
+    const voices =
+      window.speechSynthesis.getVoices();
+
+    console.log(
+      "Available voices:",
+      voices.map(
+        (voice) => voice.name
+      )
+    );
+
+    const preferredVoice =
+      voices.find((voice) =>
+        voice.name
+          .toLowerCase()
+          .includes("samantha")
+      ) ||
+      voices.find((voice) =>
+        voice.name
+          .toLowerCase()
+          .includes("ava")
+      ) ||
+      voices.find((voice) =>
+        voice.name
+          .toLowerCase()
+          .includes(
+            "google us english"
+          )
+      ) ||
+      voices.find(
+        (voice) =>
+          voice.lang === "en-US" &&
+          voice.localService === true
+      ) ||
+      voices.find((voice) =>
+        voice.lang.startsWith("en")
+      );
+
+    if (preferredVoice) {
+      speech.voice =
+        preferredVoice;
+
+      console.log(
+        "Maya voice selected:",
+        preferredVoice.name,
+        preferredVoice.lang
+      );
+    } else {
+      console.log(
+        "No preferred voice found. Using browser default."
+      );
+    }
+
+    // =========================
+    // VOICE SETTINGS
+    // =========================
+
+    speech.lang = "en-US";
+
+    speech.rate = 0.82;
+
+    speech.pitch = 1.05;
+
+    speech.volume = 1;
+
+    // =========================
+    // SPEECH START
+    // =========================
+
+    speech.onstart = () => {
+      console.log(
+        "Maya started speaking"
+      );
+
+      setIsSpeaking(true);
+
+      // Microphone MUST remain OFF
+      shouldListenRef.current =
+        false;
+
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (error) {
+          console.log(
+            "Recognition already stopped."
+          );
+        }
+      }
+
+      setIsListening(false);
+    };
+
+    // =========================
+    // SPEECH BOUNDARY
+    // =========================
+
+    speech.onboundary = (event) => {
+      console.log(
+        "🗣️ Speech boundary:",
+        event.name,
+        "char:",
+        event.charIndex
+      );
+
+      setSpeechBoundary(
+        (previous) => previous + 1
+      );
+    };
+
+    // =========================
+    // SPEECH END
+    // =========================
+
+    speech.onend = () => {
+      console.log(
+        "Maya finished speaking"
+      );
+
+      setIsSpeaking(false);
+
+      // ==========================================
+      // AUTOMATICALLY START MICROPHONE
+      // ==========================================
+
+      if (
+        isInterviewStartedRef.current
+      ) {
+        console.log(
+          "🎙 Maya finished. Starting microphone..."
+        );
+
+        setTimeout(() => {
+          startListening();
+        }, 300);
+      }
+    };
+
+    // =========================
+    // SPEECH ERROR
+    // =========================
+
+    speech.onerror = (event) => {
+      console.error(
+        "Maya speech error:",
+        event.error
+      );
+
+      setIsSpeaking(false);
+
+      /*
+       * If speech failed while the interview
+       * is active, still allow the candidate
+       * to answer.
+       */
+
+      if (
+        isInterviewStartedRef.current
+      ) {
+        setTimeout(() => {
+          startListening();
+        }, 300);
+      }
+    };
+
+    // =========================
+    // SPEAK
+    // =========================
+
+    setTimeout(() => {
+      console.log(
+        "Speaking question:",
+        text
+      );
+
+      window.speechSynthesis.speak(
+        speech
+      );
+    }, 150);
+  }
+
+  // =========================================================
+  // START INTERVIEW
+  // =========================================================
+
+  function handleStartInterview() {
+    setIsInterviewStarted(true);
+
+    isInterviewStartedRef.current =
+      true;
+
+    setSeconds(0);
+
+    console.log(
+      "Current question:",
+      currentQuestion
+    );
+
+    // Maya speaks first
+    speakQuestion(
+      currentQuestion
+    );
+  }
+
+  // =========================================================
+  // STOP INTERVIEW
+  // =========================================================
+
+  function handleStopInterview() {
+    const confirmStop =
+      window.confirm(
+        "Are you sure you want to stop the interview?"
+      );
+
+    if (!confirmStop) return;
+
+    // Stop everything
+    isInterviewStartedRef.current =
+      false;
+
+    shouldListenRef.current =
+      false;
+
+    window.speechSynthesis.cancel();
+
+    if (silenceTimerRef.current) {
+      clearTimeout(
+        silenceTimerRef.current
+      );
+    }
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.log(
+          "Recognition already stopped."
+        );
+      }
+    }
+
+    setIsSpeaking(false);
+    setIsListening(false);
+    setIsInterviewStarted(false);
 
     navigate("/home");
   }
 
+  // =========================================================
+  // QUIT INTERVIEW
+  // =========================================================
+
+  function handleQuit() {
+    const confirmQuit =
+      window.confirm(
+        "Are you sure you want to quit the interview?"
+      );
+
+    if (!confirmQuit) return;
+
+    // Stop everything
+    isInterviewStartedRef.current =
+      false;
+
+    shouldListenRef.current =
+      false;
+
+    window.speechSynthesis.cancel();
+
+    if (silenceTimerRef.current) {
+      clearTimeout(
+        silenceTimerRef.current
+      );
+    }
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.log(
+          "Recognition already stopped."
+        );
+      }
+    }
+
+    setIsSpeaking(false);
+    setIsListening(false);
+    setIsInterviewStarted(false);
+
+    navigate("/home");
+  }
+
+  // =========================================================
+  // LOADING
+  // =========================================================
+
   if (!setup) {
     return (
-      <div className="min-h-screen bg-[#F8F7FC]">
-        <Navbar />
-
-        <div className="flex min-h-[70vh] items-center justify-center">
-          <p className="font-medium text-slate-500">
-            Preparing your interview...
-          </p>
-        </div>
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        <p className="font-medium text-slate-500">
+          Preparing your interview...
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F7FC]">
-      <Navbar />
+    <div className="h-screen overflow-hidden bg-slate-50">
 
-      <main className="mx-auto max-w-7xl px-5 pb-10 pt-6 md:px-8 lg:px-10">
+      <main className="flex h-screen w-full flex-col px-6 py-4">
 
-        {/* ================= TOP BAR ================= */}
-        <section className="mb-5 flex flex-col gap-4 rounded-[18px] border border-slate-200 bg-white px-5 py-4 md:flex-row md:items-center md:justify-between">
+        {/* ============================= */}
+        {/* TOP BAR */}
+        {/* ============================= */}
+
+        <div className="flex h-[52px] flex-shrink-0 items-center justify-between">
 
           <div>
 
-            <p className="text-sm font-medium text-slate-500">
-              Live Interview
-            </p>
-
-            <h1 className="mt-1 text-xl font-bold text-slate-950">
-              {setup.interviewType} Interview
-            </h1>
+            {!isInterviewStarted ? (
+              <button
+                type="button"
+                onClick={handleStartInterview}
+                className="
+                  rounded-xl
+                  bg-green-600
+                  px-5
+                  py-2.5
+                  text-sm
+                  font-semibold
+                  text-white
+                  shadow-sm
+                  transition
+                  hover:bg-green-700
+                  md:text-base
+                "
+              >
+                Start Interview
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleStopInterview}
+                className="
+                  rounded-xl
+                  bg-red-500
+                  px-5
+                  py-2.5
+                  text-sm
+                  font-semibold
+                  text-white
+                  shadow-sm
+                  transition
+                  hover:bg-red-600
+                  md:text-base
+                "
+              >
+                Stop Interview
+              </button>
+            )}
 
           </div>
 
+          {/* TIMER + QUIT */}
 
-          <div className="flex flex-wrap items-center gap-2 text-sm">
+          <div className="flex items-center gap-5">
 
-            <span className="rounded-lg bg-slate-100 px-3 py-1.5 font-medium text-slate-600">
-              {setup.targetRole}
-            </span>
+            <div className="text-right">
 
-            <span className="rounded-lg bg-[#F0EBFF] px-3 py-1.5 font-semibold text-[#6D4DE8]">
-              {setup.difficulty}
-            </span>
+              <p className="text-xl font-bold text-slate-950 md:text-2xl">
+                {formatTime(seconds)}
+              </p>
 
-            <span className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-700">
-              {formatTime(seconds)}
-            </span>
+              {!isInterviewStarted && (
+                <p className="text-[10px] text-slate-400">
+                  Interview timer
+                </p>
+              )}
+
+            </div>
+
+            <button
+              type="button"
+              onClick={handleQuit}
+              className="
+                text-sm
+                font-semibold
+                text-red-600
+                transition
+                hover:text-red-700
+                md:text-base
+              "
+            >
+              Quit
+            </button>
 
           </div>
 
-        </section>
+        </div>
 
+        {/* ============================= */}
+        {/* INTERVIEWER AREA */}
+        {/* ============================= */}
 
-        {/* ================= LIVE INTERVIEW ================= */}
-        <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.05)]">
+        <div className="mx-auto mt-2 h-[650px] w-full max-w-[1500px]">
 
-          <div className="grid min-h-[650px] lg:grid-cols-[1.15fr_0.85fr]">
+          <div
+            className="
+              relative
+              h-full
+              overflow-hidden
+              rounded-[26px]
+              border
+              border-slate-200
+              bg-gradient-to-b
+              from-[#f1f0f8]
+              via-[#f7f7fb]
+              to-white
+              shadow-sm
+            "
+          >
 
+            {/* BACKGROUND */}
 
-            {/* ================= AVATAR SIDE ================= */}
-            <div className="relative flex min-h-[500px] items-center justify-center overflow-hidden bg-[#F3F0F8] p-6">
+            <div
+              className="
+                absolute
+                left-1/2
+                top-[48%]
+                h-[420px]
+                w-[420px]
+                -translate-x-1/2
+                -translate-y-1/2
+                rounded-full
+                bg-white/70
+                blur-3xl
+              "
+            />
 
-              <div className="absolute left-6 top-6 z-20">
+            {/* ============================= */}
+            {/* MAYA AVATAR */}
+            {/* ============================= */}
 
-                <p className="text-sm font-medium text-slate-500">
-                  Your Interviewer
+            <div
+              className="
+                absolute
+                inset-0
+                overflow-hidden
+              "
+            >
+
+              <GLBAvatarTest
+                speaking={isSpeaking}
+                speechBoundary={
+                  speechBoundary
+                }
+                height="100%"
+              />
+
+            </div>
+
+            {/* ============================= */}
+            {/* MAYA LABEL */}
+            {/* ============================= */}
+
+            <div className="absolute bottom-5 left-5 z-20">
+
+              <div
+                className="
+                  rounded-2xl
+                  border
+                  border-white/60
+                  bg-white/90
+                  px-4
+                  py-2.5
+                  shadow-sm
+                  backdrop-blur-md
+                "
+              >
+
+                <p className="text-sm font-bold text-slate-900">
+                  Maya
                 </p>
 
-                <h2 className="mt-1 text-xl font-bold text-slate-950">
-                  {interviewer?.name || "Maya"}
-                </h2>
+                <div className="mt-0.5 flex items-center gap-2">
 
-              </div>
-
-
-              {/* AVATAR VIDEO */}
-              <div className="relative w-full max-w-[540px] overflow-hidden rounded-[24px] bg-white shadow-lg">
-
-                <video
-                  src={femaleAvatar}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  className="aspect-square h-full w-full object-cover"
-                />
-
-                {/* STATUS OVERLAY */}
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
-
-                  <StatusBadge
-                    status={interviewStatus}
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      isSpeaking
+                        ? "bg-purple-500"
+                        : isListening
+                        ? "bg-red-500"
+                        : "bg-green-500"
+                    }`}
                   />
 
+                  <p className="text-xs font-medium text-slate-500">
+
+                    {isSpeaking
+                      ? "Speaking..."
+                      : isListening
+                      ? "Listening..."
+                      : "AI Interviewer"}
+
+                  </p>
+
                 </div>
 
               </div>
 
             </div>
 
+            {/* ============================= */}
+            {/* INTERVIEW STATUS */}
+            {/* ============================= */}
 
-            {/* ================= CONVERSATION SIDE ================= */}
-            <div className="flex flex-col p-6 md:p-8">
+            {isInterviewStarted && (
+              <div className="absolute bottom-5 right-5 z-20">
 
-              <div>
+                <div
+                  className="
+                    rounded-full
+                    border
+                    border-white/60
+                    bg-white/90
+                    px-4
+                    py-2
+                    text-xs
+                    font-semibold
+                    text-slate-700
+                    shadow-sm
+                    backdrop-blur-md
+                  "
+                >
 
-                <p className="text-sm font-semibold uppercase tracking-[0.12em] text-[#8A78C8]">
-                  Interview Question
-                </p>
-
-                <h2 className="mt-4 text-2xl font-bold leading-9 text-slate-950 md:text-3xl">
-                  {currentQuestion}
-                </h2>
-
-                <p className="mt-3 text-sm leading-6 text-slate-500">
-                  Listen to the interviewer and answer naturally using your microphone.
-                </p>
-
-              </div>
-
-
-              {/* INTERVIEW STATUS */}
-              <div className="mt-10 rounded-[18px] border border-slate-200 bg-[#FAFAFC] p-5">
-
-                {interviewStatus ===
-                  "speaking" && (
-                  <>
-                    <p className="font-semibold text-slate-900">
-                      Interviewer is speaking
-                    </p>
-
-                    <p className="mt-1 text-sm text-slate-500">
-                      Listen carefully to the question.
-                    </p>
-                  </>
-                )}
-
-                {interviewStatus ===
-                  "listening" && (
-                  <>
-                    <p className="font-semibold text-[#6D4DE8]">
-                      Listening to your answer
-                    </p>
-
-                    <p className="mt-1 text-sm text-slate-500">
-                      Speak naturally. Your response will be processed automatically.
-                    </p>
-                  </>
-                )}
-
-                {interviewStatus ===
-                  "processing" && (
-                  <>
-                    <p className="font-semibold text-slate-900">
-                      Processing your answer
-                    </p>
-
-                    <p className="mt-1 text-sm text-slate-500">
-                      Preparing the next interview question.
-                    </p>
-                  </>
-                )}
-
-              </div>
-
-
-              {/* MICROPHONE */}
-              <div className="flex flex-1 items-center justify-center py-12">
-
-                <div className="text-center">
-
-                  <button
-                    type="button"
-                    onClick={handleMicrophone}
-                    disabled={
-                      interviewStatus ===
-                      "processing"
-                    }
-                    className={`mx-auto flex h-24 w-24 items-center justify-center rounded-full text-lg font-bold text-white shadow-lg transition ${
-                      isMicOn
-                        ? "bg-red-500 shadow-red-200 hover:bg-red-600"
-                        : "bg-[#6D4DE8] shadow-purple-200 hover:bg-[#5E3FD1]"
-                    } disabled:cursor-not-allowed disabled:bg-slate-300`}
-                  >
-                    {isMicOn ? "Stop" : "Mic"}
-                  </button>
-
-                  <p className="mt-4 font-semibold text-slate-800">
-
-                    {isMicOn
-                      ? "Tap when you finish speaking"
-                      : "Tap to answer"}
-
-                  </p>
-
-                  <p className="mt-1 text-sm text-slate-400">
-                    Voice input
-                  </p>
+                  {isSpeaking
+                    ? "🔊 Maya is speaking"
+                    : isListening
+                    ? "🎙 Listening..."
+                    : isProcessingAnswer
+                    ? "⏳ Evaluating your answer..."
+                    : "⏳ Preparing..."}
 
                 </div>
 
               </div>
+            )}
 
+          </div>
 
-              {/* END INTERVIEW */}
-              <div className="border-t border-slate-100 pt-5">
+        </div>
 
-                <button
-                  type="button"
-                  onClick={
-                    handleEndInterview
-                  }
-                  className="w-full rounded-xl border border-red-200 px-5 py-3 font-semibold text-red-600 transition hover:bg-red-50"
-                >
-                  End Interview
-                </button>
+        {/* ============================= */}
+        {/* CURRENT QUESTION */}
+        {/* ============================= */}
 
-              </div>
+        {isInterviewStarted && (
+          <div className="mt-3 w-full flex-shrink-0">
+
+            <div
+              className="
+                mx-auto
+                max-w-5xl
+                rounded-2xl
+                bg-[#EAE4F7]
+                px-6
+                py-3
+                shadow-sm
+              "
+            >
+
+              <p className="text-center text-xs font-medium text-purple-600">
+                Maya
+              </p>
+
+              <p
+                className="
+                  mt-1
+                  text-center
+                  text-sm
+                  font-semibold
+                  leading-6
+                  text-slate-950
+                  md:text-base
+                "
+              >
+                {currentQuestion}
+              </p>
 
             </div>
 
           </div>
+        )}
 
-        </section>
+        {/* ============================= */}
+        {/* LIVE TRANSCRIPT */}
+        {/* ============================= */}
+
+        {isInterviewStarted &&
+          isListening &&
+          transcript && (
+            <div className="mx-auto mt-2 w-full max-w-5xl">
+
+              <div
+                className="
+                  rounded-2xl
+                  border
+                  border-red-100
+                  bg-white
+                  px-5
+                  py-2
+                  shadow-sm
+                "
+              >
+
+                <p className="text-center text-[10px] font-semibold uppercase tracking-wide text-red-500">
+                  Your answer
+                </p>
+
+                <p className="mt-1 text-center text-sm text-slate-700">
+                  {transcript}
+                </p>
+
+              </div>
+
+            </div>
+          )}
 
       </main>
-    </div>
-  );
-}
 
-
-/* ================= STATUS BADGE ================= */
-
-function StatusBadge({ status }) {
-  let text = "Interviewer Speaking";
-
-  if (status === "listening") {
-    text = "Listening";
-  }
-
-  if (status === "processing") {
-    text = "Processing";
-  }
-
-  return (
-    <div className="rounded-full border border-white/70 bg-white/90 px-4 py-2 text-sm font-semibold text-slate-800 shadow-md backdrop-blur">
-      {text}
     </div>
   );
 }

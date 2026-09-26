@@ -4,3 +4,7 @@
 # Environment variables
 .env
 .env.*
+
+# Local Spring Boot secrets
+backend/src/main/resources/application-local.properties
+backend/src/main/resources/application-aiven.properties
