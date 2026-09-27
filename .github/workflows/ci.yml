@@ -51,6 +51,7 @@ jobs:
     env:
       DB_PASSWORD: testpassword
       JWT_SECRET: dGhpc19pc19hX3Rlc3Rfand0X3NlY3JldF9mb3JfY2lfb25seV9ub3RfcHJvZA==
+      GEMINI_API_KEY: test-gemini-key
 
     steps:
       - name: Get project code
