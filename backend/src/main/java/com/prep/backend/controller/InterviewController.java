@@ -9,7 +9,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
-
+import com.prep.backend.dto.NextQuestionRequest;
+import com.prep.backend.dto.NextQuestionResponse;
 import com.prep.backend.dto.AnswerRequest;
 import com.prep.backend.dto.AnswerResponse;
 import com.prep.backend.dto.StartInterviewRequest;
@@ -77,17 +78,30 @@ public class InterviewController {
 
         String email = authentication.getName();
 
-        String nextQuestion =
+        AnswerResponse response =
                 interviewService.processAnswer(
                         email,
                         request
                 );
 
-        AnswerResponse response =
-                new AnswerResponse(
-                        nextQuestion
-                );
-
         return ResponseEntity.ok(response);
     }
+    @PostMapping(
+        value = "/next-question",
+        consumes = MediaType.APPLICATION_JSON_VALUE
+)
+public ResponseEntity<NextQuestionResponse> generateNextQuestion(
+        Authentication authentication,
+        @RequestBody NextQuestionRequest request
+) {
+    String email = authentication.getName();
+
+    NextQuestionResponse response =
+            interviewService.generateNextQuestion(
+                    email,
+                    request
+            );
+
+    return ResponseEntity.ok(response);
+}
 }

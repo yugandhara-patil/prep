@@ -5,7 +5,9 @@ import java.time.LocalDateTime;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.prep.backend.dto.AnswerRequest;
+import com.prep.backend.dto.AnswerResponse;
 import com.prep.backend.dto.StartInterviewRequest;
 import com.prep.backend.dto.StartInterviewResponse;
 import com.prep.backend.entity.Difficulty;
@@ -15,6 +17,8 @@ import com.prep.backend.entity.InterviewType;
 import com.prep.backend.entity.User;
 import com.prep.backend.repository.InterviewRepository;
 import com.prep.backend.repository.UserRepository;
+import com.prep.backend.dto.NextQuestionRequest;
+import com.prep.backend.dto.NextQuestionResponse;
 
 @Service
 public class InterviewService {
@@ -23,6 +27,8 @@ public class InterviewService {
     private final UserRepository userRepository;
     private final ResumeTextExtractorService resumeTextExtractorService;
     private final GeminiService geminiService;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public InterviewService(
             InterviewRepository interviewRepository,
@@ -142,20 +148,20 @@ public class InterviewService {
         // EXTRACT RESUME TEXT
         // =====================================================
 
-      String resumeText;
+        String resumeText;
 
-try {
+        try {
 
-    resumeText =
-            resumeTextExtractorService.extractText(
-                    resume
+            resumeText =
+                    resumeTextExtractorService.extractText(
+                            resume
+                    );
+
+            interview.setResumeText(
+                    resumeText
             );
 
-    interview.setResumeText(
-            resumeText
-    );
-
-} catch (Exception exception) {
+        } catch (Exception exception) {
 
             throw new RuntimeException(
                     "Failed to extract resume text",
@@ -200,43 +206,92 @@ try {
          * greet the candidate naturally.
          */
 
-        String prompt =
-        "You are conducting a realistic professional virtual interview.\n\n"
+        String prompt;
 
-        + "Interview Type: " + request.getInterviewType() + "\n"
-        + "Target Role: " + request.getTargetRole() + "\n"
-        + "Difficulty: " + request.getDifficulty() + "\n"
-        + "Technical Focus: " + request.getTechnicalFocus() + "\n\n"
+        if (interviewType == InterviewType.HR) {
 
-        + "Candidate Resume:\n"
-        + resumeText
-        + "\n\n"
+            prompt =
+                    "You are conducting a realistic professional HR virtual interview.\n\n"
 
-        + "This is a virtual interview conducted by a professional human interviewer.\n\n"
+                    + "Target Role: "
+                    + request.getTargetRole()
+                    + "\n"
 
-        + "IMPORTANT CONVERSATION RULES:\n"
-        + "1. Speak naturally and professionally.\n"
-        + "2. Give ONLY ONE conversational turn at a time.\n"
-        + "3. NEVER ask multiple questions in one response.\n"
-        + "4. NEVER combine a greeting with a question.\n"
-        + "5. NEVER ask two questions together.\n"
-        + "6. Keep each response short and natural.\n"
-        + "7. Wait for the candidate's answer before continuing.\n"
-        + "8. Do not provide explanations unless naturally appropriate.\n"
-        + "9. Do not mention that you are an AI.\n"
-        + "10. Do not say 'Please have a seat' because this is a virtual interview.\n\n"
+                    + "Difficulty: "
+                    + request.getDifficulty()
+                    + "\n\n"
 
-        + "This is the FIRST interviewer turn.\n"
-        + "The first turn must ONLY be a short professional greeting.\n"
-        + "Do NOT ask how the candidate is doing yet.\n"
-        + "Do NOT ask the candidate to introduce themselves yet.\n"
-        + "Do NOT ask about the resume yet.\n"
-        + "Do NOT ask a technical question yet.\n\n"
+                    + "Candidate Resume:\n"
+                    + resumeText
+                    + "\n\n"
 
-        + "Example style:\n"
-        + "\"Good morning. It's nice to meet you.\"\n\n"
+                    + "This is a virtual interview conducted by a professional human interviewer.\n\n"
 
-        + "Return ONLY what the interviewer should say.";
+                    + "IMPORTANT CONVERSATION RULES:\n"
+                    + "1. Speak naturally and professionally.\n"
+                    + "2. Give ONLY ONE conversational turn at a time.\n"
+                    + "3. NEVER ask multiple questions in one response.\n"
+                    + "4. NEVER combine a greeting with a question.\n"
+                    + "5. Keep each response short and natural.\n"
+                    + "6. Wait for the candidate's answer before continuing.\n"
+                    + "7. Do not mention that you are an AI.\n"
+                    + "8. Do not say 'Please have a seat' because this is a virtual interview.\n\n"
+
+                    + "This is the FIRST interviewer turn.\n"
+                    + "The first turn must ONLY be a short professional greeting.\n"
+                    + "Do NOT ask how the candidate is doing yet.\n"
+                    + "Do NOT ask for an introduction yet.\n\n"
+
+                    + "Example style:\n"
+                    + "\"Good morning. It's nice to meet you.\"\n\n"
+
+                    + "Return ONLY what the interviewer should say.";
+
+        } else {
+
+            prompt =
+                    "You are conducting a realistic professional technical virtual interview.\n\n"
+
+                    + "Target Role: "
+                    + request.getTargetRole()
+                    + "\n"
+
+                    + "Difficulty: "
+                    + request.getDifficulty()
+                    + "\n"
+
+                    + "Technical Focus: "
+                    + request.getTechnicalFocus()
+                    + "\n\n"
+
+                    + "Candidate Resume:\n"
+                    + resumeText
+                    + "\n\n"
+
+                    + "This is a virtual interview conducted by a professional human interviewer.\n\n"
+
+                    + "IMPORTANT CONVERSATION RULES:\n"
+                    + "1. Speak naturally and professionally.\n"
+                    + "2. Give ONLY ONE conversational turn at a time.\n"
+                    + "3. NEVER ask multiple questions in one response.\n"
+                    + "4. NEVER combine a greeting with a question.\n"
+                    + "5. Keep each response short and natural.\n"
+                    + "6. Wait for the candidate's answer before continuing.\n"
+                    + "7. Do not mention that you are an AI.\n"
+                    + "8. Do not say 'Please have a seat' because this is a virtual interview.\n\n"
+
+                    + "This is the FIRST interviewer turn.\n"
+                    + "The first turn must ONLY be a short professional greeting.\n"
+                    + "Do NOT ask how the candidate is doing yet.\n"
+                    + "Do NOT ask for an introduction yet.\n"
+                    + "Do NOT ask about the resume yet.\n"
+                    + "Do NOT ask a technical question yet.\n\n"
+
+                    + "Example style:\n"
+                    + "\"Good morning. It's nice to meet you.\"\n\n"
+
+                    + "Return ONLY what the interviewer should say.";
+        }
 
         String firstQuestion =
                 geminiService.generateQuestion(
@@ -280,172 +335,314 @@ try {
     // PROCESS CANDIDATE ANSWER
     // =========================================================
 
-    public String processAnswer(
-            String email,
-            AnswerRequest request
+  public AnswerResponse processAnswer(
+        String email,
+        AnswerRequest request
+) {
+
+    // =========================================================
+    // FIND LOGGED-IN USER
+    // =========================================================
+
+    User user = userRepository.findByEmail(email)
+            .orElseThrow(
+                    () -> new RuntimeException("User not found")
+            );
+
+    // =========================================================
+    // VALIDATE REQUEST
+    // =========================================================
+
+    if (request.getInterviewId() == null) {
+        throw new RuntimeException("Interview ID is required");
+    }
+
+    if (
+            request.getUserAnswer() == null
+                    || request.getUserAnswer().trim().isEmpty()
     ) {
+        throw new RuntimeException("Answer cannot be empty");
+    }
 
-        // =====================================================
-        // FIND LOGGED-IN USER
-        // =====================================================
+    if (
+            request.getCurrentQuestion() == null
+                    || request.getCurrentQuestion().trim().isEmpty()
+    ) {
+        throw new RuntimeException("Current question is required");
+    }
 
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(
-                        () -> new RuntimeException(
-                                "User not found"
-                        )
-                );
+    // =========================================================
+    // FIND INTERVIEW
+    // =========================================================
 
-        // =====================================================
-        // VALIDATE INTERVIEW ID
-        // =====================================================
-
-        if (request.getInterviewId() == null) {
-
-            throw new RuntimeException(
-                    "Interview ID is required"
+    Interview interview =
+            interviewRepository.findById(
+                    request.getInterviewId()
+            )
+            .orElseThrow(
+                    () -> new RuntimeException(
+                            "Interview not found"
+                    )
             );
-        }
 
-        // =====================================================
-        // VALIDATE USER ANSWER
-        // =====================================================
+    // =========================================================
+    // SECURITY CHECK
+    // =========================================================
 
-        if (
-                request.getUserAnswer() == null
-                || request.getUserAnswer()
-                        .trim()
-                        .isEmpty()
-        ) {
-
-            throw new RuntimeException(
-                    "Answer cannot be empty"
-            );
-        }
-
-        // =====================================================
-        // FIND INTERVIEW
-        // =====================================================
-
-        Interview interview =
-                interviewRepository.findById(
-                        request.getInterviewId()
-                )
-                .orElseThrow(
-                        () -> new RuntimeException(
-                                "Interview not found"
-                        )
-                );
-
-        // =====================================================
-        // SECURITY CHECK
-        // =====================================================
-
-        if (
-                interview.getUser() == null
-                || !interview
-                        .getUser()
-                        .getId()
-                        .equals(user.getId())
-        ) {
-
-            throw new RuntimeException(
-                    "You are not authorised to access this interview"
-            );
-        }
-
-        // =====================================================
-        // BUILD GEMINI PROMPT
-        // =====================================================
-
-        String prompt =
-        "You are conducting a realistic professional virtual interview.\n\n"
-
-        + "Interview Type: "
-        + interview.getInterviewType().name()
-        + "\n"
-
-        + "Target Role: "
-        + interview.getTargetRole()
-        + "\n"
-
-        + "Difficulty: "
-        + interview.getDifficulty().name()
-        + "\n"
-
-        + "Technical Focus: "
-        + interview.getTechnicalFocus()
-        + "\n\n"
-
-        + "Candidate Resume:\n"
-        + interview.getResumeText()
-        + "\n\n"
-
-        + "Previous Interviewer Question:\n"
-        + request.getCurrentQuestion()
-        + "\n\n"
-
-        + "Candidate's Answer:\n"
-        + request.getUserAnswer()
-        + "\n\n"
-
-        + "Now continue the interview naturally based on the candidate's answer.\n\n"
-
-        + "CRITICAL CONVERSATION RULES:\n"
-        + "1. Your response must contain ONLY ONE interviewer turn.\n"
-        + "2. Ask AT MOST ONE question.\n"
-        + "3. NEVER ask two questions in the same response.\n"
-        + "4. NEVER give a list of questions.\n"
-        + "5. NEVER combine multiple questions using 'and'.\n"
-        + "6. Do not immediately ask another question after asking one.\n"
-        + "7. Keep the response concise and conversational.\n"
-        + "8. Do not answer your own question.\n"
-        + "9. Do not mention that you are an AI.\n"
-        + "10. Speak like a professional human interviewer.\n\n"
-
-        + "INTERVIEW PROGRESSION:\n"
-        + "Move through the interview naturally rather than jumping directly into technical questions.\n\n"
-
-        + "Stage 1 - Conversation:\n"
-        + "After the initial greeting, ask the candidate how they are doing.\n\n"
-
-        + "Stage 2 - Introduction:\n"
-        + "After the candidate responds naturally, ask them to tell you about themselves.\n\n"
-
-        + "Stage 3 - Resume and Experience:\n"
-        + "Use the candidate's resume to identify relevant projects, skills, education, internships, "
-        + "certifications, or experience.\n"
-        + "Ask about ONE relevant item at a time.\n"
-        + "When the candidate mentions a project, ask natural follow-up questions about that project.\n"
-        + "For example, ask about their role, decisions they made, challenges they faced, or technologies they used.\n\n"
-
-        + "Stage 4 - Technical Interview:\n"
-        + "After the introduction and relevant resume/project discussion, gradually transition into technical questions.\n"
-        + "Ask technical questions one at a time.\n"
-        + "For a Java role, questions may cover Java, OOP, collections, exception handling, "
-        + "multithreading, databases, problem solving, or other relevant topics.\n"
-        + "Use the selected difficulty level when choosing questions.\n\n"
-
-        + "Stage 5 - Coding / Problem Solving:\n"
-        + "When appropriate, give ONE coding or problem-solving question at a time.\n"
-        + "Ask the candidate to explain their approach before writing code when appropriate.\n\n"
-
-        + "Stage 6 - Closing:\n"
-        + "Near the end of the interview, ask whether the candidate has any questions for the interviewer.\n"
-        + "After that, close the interview professionally.\n\n"
-
-        + "IMPORTANT:\n"
-        + "Use the candidate's resume when it is relevant.\n"
-        + "Do not invent projects, skills, companies, experience, or qualifications that are not present in the resume.\n"
-        + "Do not ask several questions at once.\n"
-        + "Return ONLY what the interviewer should say to the candidate.";
-
-        // =====================================================
-        // ASK GEMINI FOR NEXT RESPONSE
-        // =====================================================
-
-        return geminiService.generateQuestion(
-                prompt
+    if (
+            interview.getUser() == null
+                    || !interview
+                    .getUser()
+                    .getId()
+                    .equals(user.getId())
+    ) {
+        throw new RuntimeException(
+                "You are not authorised to access this interview"
         );
     }
+
+    // =========================================================
+    // SMALL RESUME CONTEXT
+    // =========================================================
+
+    String resumeText = interview.getResumeText();
+
+    if (resumeText == null) {
+        resumeText = "";
+    }
+
+    // Only use a small amount of resume context.
+    // This keeps Gemini requests faster.
+    if (resumeText.length() > 2500) {
+        resumeText =
+                resumeText.substring(0, 2500);
+    }
+
+    // =========================================================
+    // FAST INTERVIEWER PROMPT
+    // =========================================================
+
+    String prompt;
+
+    if (interview.getInterviewType() == InterviewType.HR) {
+
+        prompt =
+                "You are a professional human HR interviewer conducting a realistic virtual interview.\n\n"
+
+                + "Target role: "
+                + interview.getTargetRole()
+                + "\n"
+
+                + "Difficulty: "
+                + interview.getDifficulty().name()
+                + "\n\n"
+
+                + "Candidate resume context:\n"
+                + resumeText
+                + "\n\n"
+
+                + "Previous interviewer turn:\n"
+                + request.getCurrentQuestion()
+                + "\n\n"
+
+                + "Candidate answer:\n"
+                + request.getUserAnswer()
+                + "\n\n"
+
+                + "Your task is to continue a realistic HR interview.\n\n"
+
+                + "HR interview progression:\n"
+                + "1. After the opening greeting, ask how the candidate is doing.\n"
+                + "2. Then ask the candidate to tell you about themselves.\n"
+                + "3. Then ask about their background, motivation, or interest in the role.\n"
+                + "4. Then ask resume/project-based behavioural questions.\n"
+                + "5. Then ask behavioural questions about teamwork, challenges, conflict, leadership, failure, pressure, or problem solving.\n"
+                + "6. Later ask role/company motivation and career questions.\n"
+                + "7. Near the end, ask whether the candidate has any questions for the interviewer.\n"
+                + "8. Do not jump to technical questions.\n\n"
+
+                + "Use the previous interviewer turn to determine which stage comes next.\n"
+                + "If the candidate gives an interesting answer, a natural follow-up may explore that answer before moving forward.\n\n"
+
+                + "Evaluation rules:\n"
+                + "- Evaluate communication, relevance, clarity, confidence, and behavioural reasoning.\n"
+                + "- Do NOT mark a subjective HR opinion simply as incorrect.\n"
+                + "- Use INCORRECT only when the response is clearly non-responsive, contradictory to the question, or contains a factual error that matters to the answer.\n"
+                + "- If appropriate, give a very short spoken suggestion for improvement.\n\n"
+
+                + "Conversation rules:\n"
+                + "1. Ask exactly ONE next question.\n"
+                + "2. Keep the next question concise and natural.\n"
+                + "3. Do not ask multiple questions together.\n"
+                + "4. Do not give a long evaluation.\n"
+                + "5. Do not mention AI.\n"
+                + "6. Speak like a professional human interviewer.\n\n"
+
+                + "Return ONLY valid JSON in exactly this format:\n"
+                + "{\n"
+                + "  \"evaluation\": \"CORRECT | PARTIALLY_CORRECT | INCORRECT\",\n"
+                + "  \"feedback\": \"very short spoken feedback or empty string\",\n"
+                + "  \"nextQuestion\": \"one concise HR interviewer question\"\n"
+                + "}";
+
+    } else {
+
+        prompt =
+                "You are a professional human technical interviewer conducting a realistic virtual interview.\n\n"
+                + "Interview type: TECHNICAL\n"
+                + "Target role: " + interview.getTargetRole() + "\n"
+                + "Difficulty: " + interview.getDifficulty().name() + "\n"
+                + "Technical focus: " + interview.getTechnicalFocus() + "\n\n"
+                + "Candidate resume context:\n" + resumeText + "\n\n"
+                + "Previous question:\n" + request.getCurrentQuestion() + "\n\n"
+                + "Candidate answer:\n" + request.getUserAnswer() + "\n\n"
+                + "Evaluate the answer briefly and continue the technical interview.\n\n"
+                + "Rules:\n"
+                + "1. Ask exactly ONE next question.\n"
+                + "2. Keep the next question concise.\n"
+                + "3. If the answer is correct, do not give a long explanation.\n"
+                + "4. If partially correct or incorrect, give ONE short spoken correction.\n"
+                + "5. Respect the selected difficulty and technical focus.\n"
+                + "6. Do not mention AI.\n"
+                + "7. Speak like a professional human interviewer.\n\n"
+                + "Return ONLY valid JSON in exactly this format:\n"
+                + "{\n"
+                + "  \"evaluation\": \"CORRECT | PARTIALLY_CORRECT | INCORRECT\",\n"
+                + "  \"feedback\": \"very short spoken correction or empty string\",\n"
+                + "  \"nextQuestion\": \"one concise technical interviewer question\"\n"
+                + "}";
+    }
+
+    String jsonResponse =
+            geminiService.generateInterviewResponse(
+                    prompt
+            );
+
+    // =========================================================
+    // CLEAN RESPONSE
+    // =========================================================
+
+    String cleanedResponse =
+            jsonResponse
+                    .replace("```json", "")
+                    .replace("```", "")
+                    .trim();
+
+    // =========================================================
+    // PARSE RESPONSE
+    // =========================================================
+
+    try {
+
+        return objectMapper.readValue(
+                cleanedResponse,
+                AnswerResponse.class
+        );
+
+    } catch (Exception exception) {
+
+        System.err.println(
+                "❌ Failed to parse Gemini interview response:"
+        );
+
+        System.err.println(
+                cleanedResponse
+        );
+
+        throw new RuntimeException(
+                "Invalid response received from Gemini",
+                exception
+        );
+    }
+}
+public NextQuestionResponse generateNextQuestion(
+        String email,
+        NextQuestionRequest request
+) {
+
+    User user = userRepository.findByEmail(email)
+            .orElseThrow(
+                    () -> new RuntimeException("User not found")
+            );
+
+    if (request.getInterviewId() == null) {
+        throw new RuntimeException("Interview ID is required");
+    }
+
+    Interview interview =
+            interviewRepository.findById(
+                    request.getInterviewId()
+            )
+            .orElseThrow(
+                    () -> new RuntimeException("Interview not found")
+            );
+
+    if (
+            interview.getUser() == null
+                    || !interview.getUser().getId().equals(user.getId())
+    ) {
+        throw new RuntimeException(
+                "You are not authorised to access this interview"
+        );
+    }
+
+    String prompt;
+
+    if (interview.getInterviewType() == InterviewType.HR) {
+
+        prompt =
+                "You are a professional human HR interviewer conducting a realistic virtual interview.\n\n"
+                + "Target role: " + interview.getTargetRole() + "\n"
+                + "Difficulty: " + interview.getDifficulty().name() + "\n\n"
+                + "Candidate resume context:\n"
+                + (interview.getResumeText() == null ? "" : interview.getResumeText().substring(0, Math.min(interview.getResumeText().length(), 2500)))
+                + "\n\n"
+                + "Previous interviewer question:\n"
+                + request.getCurrentQuestion() + "\n\n"
+                + "Generate the next HR interview question.\n\n"
+                + "Progress naturally through these stages: greeting → wellbeing → tell me about yourself → background/motivation → resume/project behaviour → teamwork/challenges/conflict/leadership/pressure → career/company motivation → candidate questions.\n"
+                + "Use the previous question to decide the next stage. Do not jump to technical questions.\n\n"
+                + "Rules:\n"
+                + "1. Ask exactly ONE question.\n"
+                + "2. Keep it concise and natural.\n"
+                + "3. Do not ask multiple questions together.\n"
+                + "4. Do not mention AI.\n"
+                + "5. Speak like a professional human interviewer.\n\n"
+                + "Return ONLY the question text.";
+
+    } else {
+
+        prompt =
+                "You are a professional human technical interviewer conducting a realistic virtual interview.\n\n"
+                + "Target role: " + interview.getTargetRole() + "\n"
+                + "Difficulty: " + interview.getDifficulty().name() + "\n"
+                + "Technical focus: " + interview.getTechnicalFocus() + "\n\n"
+                + "The previous interviewer question was:\n"
+                + request.getCurrentQuestion() + "\n\n"
+                + "Generate the next appropriate technical interview question.\n\n"
+                + "Technical interview progression:\n"
+                + "1. After the opening greeting, ask how the candidate is doing.\n"
+                + "2. Then ask the candidate to tell you about themselves.\n"
+                + "3. Then ask about a relevant project or experience from the resume.\n"
+                + "4. Then ask about the candidate's specific contribution to that project.\n"
+                + "5. Only after the conversational opening, move into technical questions related to the selected focus and resume.\n"
+                + "6. Later include deeper technical questions and problem-solving/coding discussion appropriate to the selected difficulty.\n\n"
+                + "Use the previous question to determine the next stage. Do not jump directly to a technical question after the opening greeting.\n\n"
+                + "Rules:\n"
+                + "1. Ask exactly ONE question.\n"
+                + "2. Keep it concise and natural.\n"
+                + "3. Respect the selected difficulty and technical focus.\n"
+                + "4. Do not mention AI.\n"
+                + "5. Do not ask multiple questions.\n"
+                + "6. Speak like a professional human interviewer.\n\n"
+                + "Return ONLY the question text.";
+    }
+
+    String nextQuestion =
+            geminiService.generateQuestion(prompt);
+
+    return new NextQuestionResponse(
+            nextQuestion
+    );
+}
 }

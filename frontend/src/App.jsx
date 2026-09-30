@@ -12,7 +12,9 @@ import ProtectedRoute from "./routes/ProtectedRoute";
 import Profile from "./pages/Profile";
 import StartInterview from "./pages/StartInterview";
 import Interview from "./pages/Interview";
-
+import PracticeQuestions from "./pages/PracticeQuestions";
+import PracticeTest from "./pages/PracticeTest";
+import PracticeResults from "./pages/PracticeResults";
 import GLBAvatarTest from "./pages/GLBAvatarTest";
 
 function App() {
@@ -70,6 +72,30 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+  path="/practice-questions"
+  element={
+    <ProtectedRoute>
+      <PracticeQuestions />
+    </ProtectedRoute>
+  }
+/>
+<Route
+  path="/practice-test"
+  element={
+    <ProtectedRoute>
+      <PracticeTest />
+    </ProtectedRoute>
+  }
+/>
+<Route
+  path="/practice-results"
+  element={
+    <ProtectedRoute>
+      <PracticeResults />
+    </ProtectedRoute>
+  }
+/>
 
         {/* TEMPORARY AVATAR TEST */}
         <Route

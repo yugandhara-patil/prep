@@ -7,14 +7,23 @@ import GLBAvatarTest from "./GLBAvatarTest";
 function Interview() {
   const navigate = useNavigate();
 
-  const [setup, setSetup] = useState(null);
-  const [seconds, setSeconds] = useState(0);
+const [setup, setSetup] = useState(null);
+
+const isHRInterview =
+  String(setup?.interviewType || "").toUpperCase() === "HR";
+
+const [seconds, setSeconds] = useState(0);
 
   const [isInterviewStarted, setIsInterviewStarted] =
     useState(false);
 
   const [currentQuestion, setCurrentQuestion] =
     useState("");
+  const [preloadedQuestion, setPreloadedQuestion] =
+    useState("");
+
+  const preloadedQuestionRef =
+    useRef("");
 
   const [isSpeaking, setIsSpeaking] =
     useState(false);
@@ -351,68 +360,251 @@ function Interview() {
   }
 
   // =========================================================
-  // SUBMIT ANSWER TO BACKEND
+  // PRELOAD NEXT QUESTION
   // =========================================================
 
-  async function submitAnswerToBackend() {
-    const answer = transcriptRef.current.trim();
-    console.log("🔥 SUBMIT ANSWER FUNCTION CALLED");
-console.log("Setup:", setup);
-console.log("Interview ID:", setup?.interviewId);
-console.log("Current Question:", currentQuestion);
-console.log("Transcript:", answer);
-
-    if (!answer) {
-      console.log("No answer to submit.");
+  async function preloadNextQuestion() {
+    if (
+      !setup?.interviewId ||
+      !currentQuestion ||
+      preloadedQuestionRef.current
+    ) {
       return;
     }
-
-    if (!setup?.interviewId) {
-      console.error("Interview ID is missing.");
-      return;
-    }
-
-    if (!currentQuestion) {
-      console.error("Current question is missing.");
-      return;
-    }
-
-    if (isProcessingAnswer) {
-      console.log("Answer is already being processed.");
-      return;
-    }
-
-    console.log("================================");
-    console.log("📤 SUBMITTING ANSWER");
-    console.log("Interview ID:", setup.interviewId);
-    console.log("Question:", currentQuestion);
-    console.log("Answer:", answer);
-    console.log("================================");
-
-    setIsProcessingAnswer(true);
 
     try {
       const token = localStorage.getItem("token");
 
-     const response = await axios.post(
-`${import.meta.env.VITE_API_URL}/api/interviews/answer`,
-  {
-    interviewId: setup.interviewId,
-    userAnswer: answer,
-    currentQuestion: currentQuestion,
-  },
-  {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  }
-);
+      console.log(
+        "⚡ Preloading next interview question..."
+      );
 
-      console.log("================================");
-      console.log("✅ BACKEND RESPONSE");
-      console.log(response.data);
-      console.log("================================");
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/interviews/next-question`,
+        {
+          interviewId: setup.interviewId,
+          currentQuestion: currentQuestion,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const nextQuestion =
+        response.data?.nextQuestion;
+
+      if (nextQuestion) {
+        preloadedQuestionRef.current =
+          nextQuestion;
+
+        setPreloadedQuestion(
+          nextQuestion
+        );
+
+        console.log(
+          "⚡ Next question preloaded:",
+          nextQuestion
+        );
+      }
+    } catch (error) {
+      console.error(
+        "❌ Failed to preload next question:",
+        error
+      );
+    }
+  }
+
+  // =========================================================
+  // SUBMIT ANSWER TO BACKEND
+  // =========================================================
+
+  async function submitAnswerToBackend() {
+    const answer =
+      transcriptRef.current.trim();
+
+    const questionBeingAnswered =
+      currentQuestion;
+
+    console.log(
+      "🔥 SUBMIT ANSWER FUNCTION CALLED"
+    );
+
+    console.log(
+      "Interview ID:",
+      setup?.interviewId
+    );
+
+    console.log(
+      "Current Question:",
+      questionBeingAnswered
+    );
+
+    console.log(
+      "Transcript:",
+      answer
+    );
+
+    if (!answer) {
+      console.log(
+        "No answer to submit."
+      );
+      return;
+    }
+
+    if (!setup?.interviewId) {
+      console.error(
+        "Interview ID is missing."
+      );
+      return;
+    }
+
+    if (!questionBeingAnswered) {
+      console.error(
+        "Current question is missing."
+      );
+      return;
+    }
+
+    if (isProcessingAnswer) {
+      console.log(
+        "Answer is already being processed."
+      );
+      return;
+    }
+
+    const token =
+      localStorage.getItem("token");
+
+    // =====================================================
+    // USE PRELOADED QUESTION IMMEDIATELY
+    // =====================================================
+
+    const instantNextQuestion =
+      preloadedQuestionRef.current;
+
+    if (instantNextQuestion) {
+      console.log(
+        "⚡ Using preloaded question immediately:",
+        instantNextQuestion
+      );
+
+      setCurrentQuestion(
+        instantNextQuestion
+      );
+
+      preloadedQuestionRef.current =
+        "";
+
+      setPreloadedQuestion("");
+
+      transcriptRef.current = "";
+      setTranscript("");
+
+      // Maya can continue immediately.
+      speakQuestion(
+        instantNextQuestion
+      );
+    }
+
+    // =====================================================
+    // EVALUATE ANSWER IN BACKGROUND
+    // =====================================================
+
+    setIsProcessingAnswer(true);
+
+    try {
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/interviews/answer`,
+        {
+          interviewId: setup.interviewId,
+          userAnswer: answer,
+          currentQuestion:
+            questionBeingAnswered,
+        },
+        {
+          headers: {
+            Authorization:
+              `Bearer ${token}`,
+            "Content-Type":
+              "application/json",
+          },
+        }
+      );
+
+      console.log(
+        "================================"
+      );
+
+      console.log(
+        "✅ BACKGROUND EVALUATION RESPONSE"
+      );
+
+      console.log(
+        response.data
+      );
+
+      console.log(
+        "================================"
+      );
+
+      const evaluation =
+        response.data?.evaluation;
+
+      const feedback =
+        response.data?.feedback || "";
+
+      console.log(
+        "Evaluation:",
+        evaluation
+      );
+
+      console.log(
+        "Feedback:",
+        feedback
+      );
+
+      /*
+       * When a question was preloaded, Maya has
+       * already continued the interview.
+       *
+       * The evaluation is therefore kept in the
+       * background instead of interrupting the
+       * conversation.
+       *
+       * The detailed evaluation can be used by
+       * the final interview report.
+       */
+      if (instantNextQuestion) {
+        console.log(
+          "⚡ Interview continued without waiting for evaluation."
+        );
+
+        if (
+          feedback &&
+          (
+            evaluation === "INCORRECT" ||
+            evaluation ===
+              "PARTIALLY_CORRECT"
+          )
+        ) {
+          console.log(
+            "📝 Correction available for report:",
+            feedback
+          );
+        }
+
+        return;
+      }
+
+      // ===================================================
+      // FALLBACK
+      // ===================================================
+      // If preloading was not finished when the candidate
+      // answered, use the question returned by the normal
+      // answer request.
 
       const nextQuestion =
         response.data?.nextQuestion;
@@ -424,15 +616,41 @@ console.log("Transcript:", answer);
         return;
       }
 
-      // Update question on screen
-      setCurrentQuestion(nextQuestion);
+      let mayaResponse =
+        nextQuestion;
 
-      // Clear previous transcript
+      if (
+        feedback &&
+        (
+          evaluation === "INCORRECT" ||
+          evaluation ===
+            "PARTIALLY_CORRECT"
+        )
+      ) {
+        mayaResponse =
+          `${feedback} ${nextQuestion}`;
+      }
+
+      setCurrentQuestion(
+        nextQuestion
+      );
+
+      preloadedQuestionRef.current =
+        "";
+
+      setPreloadedQuestion("");
+
       transcriptRef.current = "";
       setTranscript("");
 
-      // Maya speaks the next question
-      speakQuestion(nextQuestion);
+      console.log(
+        "🗣 Maya response:",
+        mayaResponse
+      );
+
+      speakQuestion(
+        mayaResponse
+      );
 
     } catch (error) {
       console.error(
@@ -451,6 +669,12 @@ console.log("Transcript:", answer);
           error.response.data
         );
       }
+
+      /*
+       * If Maya already moved to a preloaded question,
+       * do not interrupt the interview because the
+       * evaluation request failed.
+       */
     } finally {
       setIsProcessingAnswer(false);
     }
@@ -666,6 +890,14 @@ console.log("Transcript:", answer);
       );
 
       setIsSpeaking(false);
+
+      // Prepare the next question while the
+      // candidate is thinking and answering.
+      if (
+        isInterviewStartedRef.current
+      ) {
+        preloadNextQuestion();
+      }
 
       // ==========================================
       // AUTOMATICALLY START MICROPHONE
@@ -1044,11 +1276,13 @@ console.log("Transcript:", answer);
 
                   <p className="text-xs font-medium text-slate-500">
 
-                    {isSpeaking
-                      ? "Speaking..."
-                      : isListening
-                      ? "Listening..."
-                      : "AI Interviewer"}
+                   {isSpeaking
+  ? "Speaking..."
+  : isListening
+  ? "Listening..."
+  : isHRInterview
+  ? "HR Interviewer"
+  : "Technical Interviewer"}
 
                   </p>
 

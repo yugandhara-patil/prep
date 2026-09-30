@@ -16,12 +16,15 @@ public class GeminiService {
 
     private final RestClient restClient = RestClient.create();
 
+    // =========================================================
+    // GENERATE NORMAL INTERVIEW QUESTION
+    // =========================================================
+
     public String generateQuestion(String prompt) {
 
         String url =
                 "https://generativelanguage.googleapis.com/v1beta/models/"
-                + "gemini-3.8-flash:generateContent";
-
++ "gemini-3.5-flash:generateContent";
         Map<String, Object> body = Map.of(
                 "contents", List.of(
                         Map.of(
@@ -51,6 +54,7 @@ public class GeminiService {
 
                 // Gemini returned 503 - temporarily unavailable
                 if (attempt == 3) {
+
                     throw new RuntimeException(
                             "Gemini is temporarily unavailable. Please try again.",
                             exception
@@ -58,8 +62,10 @@ public class GeminiService {
                 }
 
                 try {
+
                     // Wait 2 seconds before trying again
                     Thread.sleep(2000);
+
                 } catch (InterruptedException interruptedException) {
 
                     Thread.currentThread().interrupt();
@@ -77,18 +83,171 @@ public class GeminiService {
         );
     }
 
+
+    // =========================================================
+    // GENERATE STRUCTURED INTERVIEW RESPONSE
+    // =========================================================
+
+    public String generateInterviewResponse(String prompt) {
+
+        String url =
+                "https://generativelanguage.googleapis.com/v1beta/models/"
++ "gemini-3.5-flash:generateContent";
+        Map<String, Object> body = Map.of(
+                "contents", List.of(
+                        Map.of(
+                                "parts", List.of(
+                                        Map.of("text", prompt)
+                                )
+                        )
+                ),
+                "generationConfig", Map.of(
+                        "responseMimeType", "application/json"
+                )
+        );
+
+        // Try Gemini up to 3 times
+        for (int attempt = 1; attempt <= 3; attempt++) {
+
+            try {
+
+                Map response = restClient.post()
+                        .uri(url)
+                        .header("x-goog-api-key", apiKey)
+                        .header("Content-Type", "application/json")
+                        .body(body)
+                        .retrieve()
+                        .body(Map.class);
+
+                return extractText(response);
+
+            } catch (HttpServerErrorException.ServiceUnavailable exception) {
+
+                // Gemini returned 503 - temporarily unavailable
+                if (attempt == 3) {
+
+                    throw new RuntimeException(
+                            "Gemini is temporarily unavailable. Please try again.",
+                            exception
+                    );
+                }
+
+                try {
+
+                    // Wait 1 second before retrying
+                    Thread.sleep(1000);
+
+                } catch (InterruptedException interruptedException) {
+
+                    Thread.currentThread().interrupt();
+
+                    throw new RuntimeException(
+                            "Gemini request was interrupted",
+                            interruptedException
+                    );
+                }
+            }
+        }
+
+        throw new RuntimeException(
+                "Unable to generate interview response"
+        );
+    }
+
+
+    // =========================================================
+    // GENERATE PRACTICE QUESTIONS
+    // =========================================================
+
+    public String generatePracticeQuestions(String prompt) {
+
+        String url =
+                "https://generativelanguage.googleapis.com/v1beta/models/"
+                + "gemini-3.5-flash-lite:generateContent";
+
+        Map<String, Object> body = Map.of(
+                "contents", List.of(
+                        Map.of(
+                                "parts", List.of(
+                                        Map.of("text", prompt)
+                                )
+                        )
+                ),
+                "generationConfig", Map.of(
+                        "responseMimeType", "application/json"
+                )
+        );
+
+        // Try Gemini up to 3 times
+        for (int attempt = 1; attempt <= 3; attempt++) {
+
+            try {
+
+                Map response = restClient.post()
+                        .uri(url)
+                        .header("x-goog-api-key", apiKey)
+                        .header("Content-Type", "application/json")
+                        .body(body)
+                        .retrieve()
+                        .body(Map.class);
+
+                return extractText(response);
+
+            } catch (HttpServerErrorException.ServiceUnavailable exception) {
+
+                if (attempt == 3) {
+
+                    throw new RuntimeException(
+                            "Gemini practice question service is temporarily unavailable. Please try again.",
+                            exception
+                    );
+                }
+
+                try {
+
+                    Thread.sleep(1500);
+
+                } catch (InterruptedException interruptedException) {
+
+                    Thread.currentThread().interrupt();
+
+                    throw new RuntimeException(
+                            "Gemini practice question request was interrupted",
+                            interruptedException
+                    );
+                }
+            }
+        }
+
+        throw new RuntimeException(
+                "Unable to generate practice questions"
+        );
+    }
+
+
+    // =========================================================
+    // EXTRACT GEMINI TEXT
+    // =========================================================
+
     private String extractText(Map response) {
 
-        List candidates = (List) response.get("candidates");
+        List candidates =
+                (List) response.get("candidates");
 
-        Map candidate = (Map) candidates.get(0);
+        Map candidate =
+                (Map) candidates.get(0);
 
-        Map content = (Map) candidate.get("content");
+        Map content =
+                (Map) candidate.get("content");
 
-        List parts = (List) content.get("parts");
+        List parts =
+                (List) content.get("parts");
 
-        Map part = (Map) parts.get(0);
+        Map part =
+                (Map) parts.get(0);
 
-        return part.get("text").toString().trim();
+        return part.get("text")
+                .toString()
+                .trim();
     }
 }
