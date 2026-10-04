@@ -6,7 +6,6 @@ import avatarUrl from "../assets/avatars/portrait_lipsync.glb";
 
 function GLBAvatarTest({
   speaking = false,
-  speechBoundary = 0,
   height = "100%",
 }) {
   const mountRef = useRef(null);
@@ -15,8 +14,7 @@ function GLBAvatarTest({
   const lipSyncActionRef = useRef(null);
 
   const speakingRef = useRef(speaking);
-  const speechBoundaryRef =
-    useRef(speechBoundary);
+  
 
   // ------------------------------------------
   // MOUTH / MORPH TARGET REFERENCES
@@ -114,64 +112,7 @@ function GLBAvatarTest({
     }
   }, [speaking]);
 
-  // ------------------------------------------
-  // SPEECH BOUNDARY
-  // ------------------------------------------
-
-  useEffect(() => {
-    speechBoundaryRef.current =
-      speechBoundary;
-
-    if (!speakingRef.current) {
-      return;
-    }
-
-    console.log(
-      "🗣️ New speech boundary:",
-      speechBoundary
-    );
-
-    /*
-     * Every time SpeechSynthesis reaches
-     * another part of the sentence, start
-     * a new mouth movement.
-     */
-
-    const pattern =
-      speechBoundary % 4;
-
-    let openAmount = 0.55;
-    let roundAmount = 0.15;
-
-    if (pattern === 0) {
-      openAmount = 0.65;
-      roundAmount = 0.1;
-    }
-
-    if (pattern === 1) {
-      openAmount = 0.35;
-      roundAmount = 0.35;
-    }
-
-    if (pattern === 2) {
-      openAmount = 0.75;
-      roundAmount = 0.05;
-    }
-
-    if (pattern === 3) {
-      openAmount = 0.45;
-      roundAmount = 0.5;
-    }
-
-    mouthAnimationRef.current = {
-      active: true,
-      progress: 0,
-      duration: 130 + Math.random() * 100,
-      openAmount,
-      roundAmount,
-    };
-  }, [speechBoundary]);
-
+ 
   // ------------------------------------------
   // THREE.JS
   // ------------------------------------------

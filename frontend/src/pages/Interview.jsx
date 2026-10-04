@@ -7,23 +7,28 @@ import GLBAvatarTest from "./GLBAvatarTest";
 function Interview() {
   const navigate = useNavigate();
 
-const [setup, setSetup] = useState(null);
+  const [setup, setSetup] = useState(null);
 
-const isHRInterview =
-  String(setup?.interviewType || "").toUpperCase() === "HR";
+  const isHRInterview =
+    String(setup?.interviewType || "").toUpperCase() === "HR";
 
-const [seconds, setSeconds] = useState(0);
+  const [seconds, setSeconds] = useState(0);
 
   const [isInterviewStarted, setIsInterviewStarted] =
     useState(false);
 
   const [currentQuestion, setCurrentQuestion] =
     useState("");
-  const [preloadedQuestion, setPreloadedQuestion] =
+
+  // Keep Maya's complete spoken response separate from the
+  // actual question sent back to the backend.
+  const [mayaResponseText, setMayaResponseText] =
     useState("");
 
-  const preloadedQuestionRef =
-    useRef("");
+  // Tracks where we are in the interview conversation.
+  // The backend uses this to prevent repeated questions.
+  const [conversationStage, setConversationStage] =
+    useState("GREETING");
 
   const [isSpeaking, setIsSpeaking] =
     useState(false);
@@ -44,6 +49,12 @@ const [seconds, setSeconds] = useState(0);
   const [speechBoundary, setSpeechBoundary] =
     useState(0);
 
+  // Stores interview performance for the final results page.
+  const [performance, setPerformance] = useState({
+    evaluations: [],
+    questionsAnswered: 0,
+  });
+
   // =========================
   // REFS
   // =========================
@@ -60,6 +71,23 @@ const [seconds, setSeconds] = useState(0);
 
   const isInterviewStartedRef =
     useRef(false);
+
+  const currentQuestionRef =
+    useRef("");
+
+  const pendingNextQuestionRef =
+    useRef(null);
+
+  // Ends the interview after Maya finishes the closing.
+  const pendingFinishRef =
+    useRef(null);
+
+  // Frontend guard against accidental repeated questions.
+  const askedQuestionsRef =
+    useRef([]);
+
+  const conversationStageRef =
+    useRef("GREETING");
 
   // =========================
   // LOAD INTERVIEW SETUP
@@ -79,10 +107,23 @@ const [seconds, setSeconds] = useState(0);
 
     setSetup(parsedSetup);
 
-    setCurrentQuestion(
+    const initialQuestion =
       parsedSetup.firstQuestion ||
-        "Unable to load the interview question."
-    );
+      "Unable to load the interview question.";
+
+    const initialStage =
+      parsedSetup.conversationStage || "GREETING";
+
+    setCurrentQuestion(initialQuestion);
+    setMayaResponseText(initialQuestion);
+    currentQuestionRef.current = initialQuestion;
+
+    askedQuestionsRef.current = [initialQuestion];
+    pendingNextQuestionRef.current = null;
+    pendingFinishRef.current = null;
+
+    setConversationStage(initialStage);
+    conversationStageRef.current = initialStage;
   }, [navigate]);
 
   // =========================
@@ -148,11 +189,39 @@ const [seconds, setSeconds] = useState(0);
   }
 
   // =========================================================
+  // CLEAN SPEECH TRANSCRIPT
+  // =========================================================
+
+  function cleanTranscript(text) {
+    return String(text || "")
+      .replace(/\b(no|yes|okay|ok)\s+\1\b/gi, "$1")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  // =========================================================
+  // CLEAN MAYA SPEECH
+  // =========================================================
+
+  function cleanSpeechText(text) {
+  return String(text || "")
+    // Remove ALL punctuation and symbols
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    // Remove extra spaces
+    .replace(/\s+/g, " ")
+    .trim();
+}
+  // =========================================================
   // START SPEECH RECOGNITION
   // =========================================================
 
   function startListening() {
     if (!isInterviewStartedRef.current) {
+      return;
+    }
+
+    if (conversationStageRef.current === "CLOSING") {
+      console.log("Interview is closing. Microphone will remain off.");
       return;
     }
 
@@ -218,61 +287,39 @@ const [seconds, setSeconds] = useState(0);
     // =========================
     // RECOGNITION RESULTS
     // =========================
+recognition.onresult = (event) => {
+  let completeTranscript = "";
 
-    recognition.onresult = (event) => {
-      let completeTranscript = "";
+  for (let i = 0; i < event.results.length; i++) {
+    completeTranscript += event.results[i][0].transcript + " ";
+  }
 
-      for (
-        let i = 0;
-        i < event.results.length;
-        i++
-      ) {
-        completeTranscript +=
-          event.results[i][0].transcript + " ";
-      }
+  completeTranscript = cleanTranscript(completeTranscript);
 
-      completeTranscript =
-        completeTranscript.trim();
+  console.log("📝 Transcript:", completeTranscript);
 
+  transcriptRef.current = completeTranscript;
+  setTranscript(completeTranscript);
+
+  // Reset silence timer whenever speech is detected
+  if (silenceTimerRef.current) {
+    clearTimeout(silenceTimerRef.current);
+  }
+
+  // Short answers such as "Yes", "No", "I'm good" are usually
+  // returned as final results. Give them a short settling period
+  // before submitting instead of waiting for another speech event.
+  silenceTimerRef.current = setTimeout(() => {
+    if (transcriptRef.current.trim()) {
       console.log(
-        "📝 Transcript:",
-        completeTranscript
+        "🤫 Silence detected. Submitting answer:",
+        transcriptRef.current
       );
 
-      transcriptRef.current =
-        completeTranscript;
-
-      setTranscript(
-        completeTranscript
-      );
-
-      // =========================
-      // SPEECH BOUNDARY
-      // =========================
-
-      setSpeechBoundary(
-        (previous) => previous + 1
-      );
-
-      // =========================
-      // RESET SILENCE TIMER
-      // =========================
-
-      if (silenceTimerRef.current) {
-        clearTimeout(
-          silenceTimerRef.current
-        );
-      }
-
-      silenceTimerRef.current =
-        setTimeout(() => {
-          console.log(
-            "🤫 Silence detected. Stopping microphone."
-          );
-
-          stopListening();
-        }, 1800);
-    };
+      stopListening();
+    }
+  }, 1400);
+};
 
     // =========================
     // RECOGNITION ERROR
@@ -337,7 +384,7 @@ const [seconds, setSeconds] = useState(0);
           ) {
             startListening();
           }
-        }, 300);
+        }, 80);
       }
     };
 
@@ -359,62 +406,25 @@ const [seconds, setSeconds] = useState(0);
     }
   }
 
-  // =========================================================
-  // PRELOAD NEXT QUESTION
-  // =========================================================
+  function isIDontKnowAnswer(text) {
+    const normalized = String(text || "")
+      .toLowerCase()
+      .replace(/[^a-z\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
 
-  async function preloadNextQuestion() {
-    if (
-      !setup?.interviewId ||
-      !currentQuestion ||
-      preloadedQuestionRef.current
-    ) {
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem("token");
-
-      console.log(
-        "⚡ Preloading next interview question..."
-      );
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/interviews/next-question`,
-        {
-          interviewId: setup.interviewId,
-          currentQuestion: currentQuestion,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      const nextQuestion =
-        response.data?.nextQuestion;
-
-      if (nextQuestion) {
-        preloadedQuestionRef.current =
-          nextQuestion;
-
-        setPreloadedQuestion(
-          nextQuestion
-        );
-
-        console.log(
-          "⚡ Next question preloaded:",
-          nextQuestion
-        );
-      }
-    } catch (error) {
-      console.error(
-        "❌ Failed to preload next question:",
-        error
-      );
-    }
+    return [
+      "i dont know",
+      "i don't know",
+      "dont know",
+      "don't know",
+      "i have no idea",
+      "no idea",
+      "not sure",
+      "i am not sure",
+      "i'm not sure",
+      "i do not know",
+    ].includes(normalized);
   }
 
   // =========================================================
@@ -422,262 +432,321 @@ const [seconds, setSeconds] = useState(0);
   // =========================================================
 
   async function submitAnswerToBackend() {
-    const answer =
-      transcriptRef.current.trim();
+    const answer = transcriptRef.current.trim();
 
     const questionBeingAnswered =
-      currentQuestion;
+      currentQuestionRef.current || currentQuestion;
 
-    console.log(
-      "🔥 SUBMIT ANSWER FUNCTION CALLED"
-    );
+    const stageBeingAnswered =
+      conversationStageRef.current || "GREETING";
 
-    console.log(
-      "Interview ID:",
-      setup?.interviewId
-    );
-
-    console.log(
-      "Current Question:",
-      questionBeingAnswered
-    );
-
-    console.log(
-      "Transcript:",
-      answer
-    );
+    console.log("🔥 SUBMIT ANSWER FUNCTION CALLED");
+    console.log("Interview ID:", setup?.interviewId);
+    console.log("Current Question:", questionBeingAnswered);
+    console.log("Conversation Stage:", stageBeingAnswered);
+    console.log("Transcript:", answer);
 
     if (!answer) {
-      console.log(
-        "No answer to submit."
-      );
+      console.log("No answer to submit.");
       return;
     }
 
     if (!setup?.interviewId) {
-      console.error(
-        "Interview ID is missing."
-      );
+      console.error("Interview ID is missing.");
       return;
     }
 
     if (!questionBeingAnswered) {
-      console.error(
-        "Current question is missing."
-      );
+      console.error("Current question is missing.");
       return;
     }
 
     if (isProcessingAnswer) {
-      console.log(
-        "Answer is already being processed."
-      );
+      console.log("Answer is already being processed.");
       return;
     }
 
-    const token =
-      localStorage.getItem("token");
-
-    // =====================================================
-    // USE PRELOADED QUESTION IMMEDIATELY
-    // =====================================================
-
-    const instantNextQuestion =
-      preloadedQuestionRef.current;
-
-    if (instantNextQuestion) {
-      console.log(
-        "⚡ Using preloaded question immediately:",
-        instantNextQuestion
-      );
-
-      setCurrentQuestion(
-        instantNextQuestion
-      );
-
-      preloadedQuestionRef.current =
-        "";
-
-      setPreloadedQuestion("");
-
-      transcriptRef.current = "";
-      setTranscript("");
-
-      // Maya can continue immediately.
-      speakQuestion(
-        instantNextQuestion
-      );
-    }
-
-    // =====================================================
-    // EVALUATE ANSWER IN BACKGROUND
-    // =====================================================
+    const token = localStorage.getItem("token");
 
     setIsProcessingAnswer(true);
 
     try {
+      // One request per answer. We deliberately do not preload the
+      // next question because the interviewer must hear the answer
+      // before deciding what to ask next.
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL}/api/interviews/answer`,
         {
           interviewId: setup.interviewId,
           userAnswer: answer,
-          currentQuestion:
-            questionBeingAnswered,
+          currentQuestion: questionBeingAnswered,
+          stage: stageBeingAnswered,
         },
         {
+          timeout: 120000,
           headers: {
-            Authorization:
-              `Bearer ${token}`,
-            "Content-Type":
-              "application/json",
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
           },
         }
       );
 
-      console.log(
-        "================================"
-      );
+      console.log("================================");
+      console.log("✅ INTERVIEW RESPONSE");
+      console.log(response.data);
+      console.log("================================");
 
-      console.log(
-        "✅ BACKGROUND EVALUATION RESPONSE"
-      );
+      const evaluation = response.data?.evaluation;
+      const feedback = response.data?.feedback || "";
+      const nextQuestion = response.data?.nextQuestion;
+      const nextStage =
+        response.data?.nextStage || stageBeingAnswered;
 
-      console.log(
-        response.data
-      );
+      // Keep a lightweight performance record for the final report.
+      setPerformance((previous) => ({
+        evaluations: [
+          ...previous.evaluations,
+          {
+            evaluation,
+            feedback,
+            question: questionBeingAnswered,
+            answer,
+            stage: stageBeingAnswered,
+            communicationScore: response.data?.communicationScore ?? null,
+            technicalKnowledgeScore: response.data?.technicalKnowledgeScore ?? null,
+            projectKnowledgeScore: response.data?.projectKnowledgeScore ?? null,
+            responseQualityScore: response.data?.responseQualityScore ?? null,
+          },
+        ],
+        questionsAnswered: previous.questionsAnswered + 1,
+      }));
 
-      console.log(
-        "================================"
-      );
-
-      const evaluation =
-        response.data?.evaluation;
-
-      const feedback =
-        response.data?.feedback || "";
-
-      console.log(
-        "Evaluation:",
-        evaluation
-      );
-
-      console.log(
-        "Feedback:",
-        feedback
-      );
-
-      /*
-       * When a question was preloaded, Maya has
-       * already continued the interview.
-       *
-       * The evaluation is therefore kept in the
-       * background instead of interrupting the
-       * conversation.
-       *
-       * The detailed evaluation can be used by
-       * the final interview report.
-       */
-      if (instantNextQuestion) {
-        console.log(
-          "⚡ Interview continued without waiting for evaluation."
-        );
-
-        if (
-          feedback &&
-          (
-            evaluation === "INCORRECT" ||
-            evaluation ===
-              "PARTIALLY_CORRECT"
-          )
-        ) {
-          console.log(
-            "📝 Correction available for report:",
-            feedback
-          );
-        }
-
+      // The candidate's final "Thank you" ends the interview.
+      if (stageBeingAnswered === "CLOSING") {
+        finishInterview(evaluation, questionBeingAnswered, answer);
         return;
       }
-
-      // ===================================================
-      // FALLBACK
-      // ===================================================
-      // If preloading was not finished when the candidate
-      // answered, use the question returned by the normal
-      // answer request.
-
-      const nextQuestion =
-        response.data?.nextQuestion;
 
       if (!nextQuestion) {
-        console.error(
-          "Backend did not return a next question."
-        );
+        console.error("Backend did not return a next question.");
         return;
       }
 
-      let mayaResponse =
-        nextQuestion;
+      // Move the interview stage only after the answer has been
+      // processed by the backend.
+      const normalizedNextQuestion =
+        String(nextQuestion)
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
 
-      if (
-        feedback &&
-        (
-          evaluation === "INCORRECT" ||
-          evaluation ===
-            "PARTIALLY_CORRECT"
-        )
-      ) {
-        mayaResponse =
-          `${feedback} ${nextQuestion}`;
+      const duplicateQuestion =
+        askedQuestionsRef.current.some(
+          (question) =>
+            String(question)
+              .toLowerCase()
+              .replace(/[^a-z0-9\s]/g, "")
+              .replace(/\s+/g, " ")
+              .trim() === normalizedNextQuestion
+        );
+
+      if (duplicateQuestion) {
+        console.warn(
+          "Backend returned a repeated question. Backend retry protection should prevent this."
+        );
       }
 
-      setCurrentQuestion(
-        nextQuestion
-      );
+      askedQuestionsRef.current.push(nextQuestion);
 
-      preloadedQuestionRef.current =
-        "";
+      conversationStageRef.current = nextStage;
+      setConversationStage(nextStage);
 
-      setPreloadedQuestion("");
+      currentQuestionRef.current = nextQuestion;
+      setCurrentQuestion(nextQuestion);
 
       transcriptRef.current = "";
       setTranscript("");
 
+ // =========================================================
+// MAYA SPOKEN RESPONSE
+// =========================================================
+
+const evaluationType =
+        String(evaluation).toUpperCase();
+
+      const isCorrection =
+        evaluationType === "INCORRECT" ||
+        evaluationType === "PARTIALLY_CORRECT";
+
+      const isCandidateQuestionsClosing =
+        stageBeingAnswered === "CANDIDATE_QUESTIONS" &&
+        nextStage === "CLOSING";
+
+      console.log("Evaluation:", evaluation);
+      console.log("Next stage:", nextStage);
       console.log(
-        "🗣 Maya response:",
-        mayaResponse
+        "Candidate questions closing:",
+        isCandidateQuestionsClosing
       );
 
-      speakQuestion(
-        mayaResponse
-      );
+      if (isCorrection) {
+        let spokenFeedback = feedback.trim();
+
+        if (evaluationType === "PARTIALLY_CORRECT"
+            && !spokenFeedback.toLowerCase().startsWith("your answer is partially correct")) {
+          spokenFeedback =
+            "Your answer is partially correct."
+            + (spokenFeedback ? " " + spokenFeedback : "");
+        }
+
+ if (evaluationType === "INCORRECT") {
+  const normalizedAnswer = answer
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[.,!?]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const isIDontKnow =
+    normalizedAnswer.includes("i dont know") ||
+    normalizedAnswer.includes("i do not know") ||
+    normalizedAnswer.includes("dont know") ||
+    normalizedAnswer.includes("do not know") ||
+    normalizedAnswer.includes("not sure") ||
+    normalizedAnswer.includes("no idea") ||
+    normalizedAnswer.includes("i have no idea");
+
+  if (isIDontKnow) {
+    spokenFeedback = spokenFeedback
+      .replace(/^No, your answer is incorrect\.\s*/i, "")
+      .replace(/^Your answer is incorrect\.\s*/i, "")
+      .trim();
+
+    spokenFeedback =
+      "It is okay."
+      + (spokenFeedback ? " " + spokenFeedback : "");
+  } else if (
+    !spokenFeedback.toLowerCase().startsWith("your answer is incorrect") &&
+    !spokenFeedback.toLowerCase().startsWith("no, your answer is incorrect")
+  ) {
+    spokenFeedback =
+      "No, your answer is incorrect."
+      + (spokenFeedback ? " " + spokenFeedback : "");
+  }
+}
+
+        pendingNextQuestionRef.current = nextQuestion;
+
+        console.log("🗣 Maya correction:", spokenFeedback);
+        console.log("➡️ Next question waiting:", nextQuestion);
+
+        setMayaResponseText(spokenFeedback);
+        speakQuestion(spokenFeedback);
+      } else if (isCandidateQuestionsClosing) {
+        // "No" is handled as the final candidate response.
+        // Maya speaks the closing once and the interview ends.
+        pendingNextQuestionRef.current = null;
+
+        pendingFinishRef.current = {
+          evaluation,
+          question: nextQuestion,
+          answer,
+        };
+
+        console.log("🗣 Maya closing:", nextQuestion);
+
+        setMayaResponseText(nextQuestion);
+        speakQuestion(nextQuestion);
+  } else {
+  pendingNextQuestionRef.current = null;
+
+  const isTechnicalStage =
+    stageBeingAnswered === "TECHNICAL_1" ||
+    stageBeingAnswered === "TECHNICAL_2" ||
+    stageBeingAnswered === "TECHNICAL_3" ||
+    stageBeingAnswered === "TECHNICAL_4" ||
+    stageBeingAnswered === "TECHNICAL_5" ||
+    stageBeingAnswered === "TECHNICAL_6";
+
+  const spokenResponse = isTechnicalStage
+    ? `Yes, that’s correct. ${nextQuestion}`
+    : nextQuestion;
+
+  setMayaResponseText(spokenResponse);
+  speakQuestion(spokenResponse);
+}
 
     } catch (error) {
-      console.error(
-        "❌ Failed to submit answer:",
-        error
-      );
+      console.error("❌ Failed to submit answer:", error);
 
       if (error.response) {
-        console.error(
-          "Backend status:",
-          error.response.status
-        );
-
-        console.error(
-          "Backend response:",
-          error.response.data
-        );
+        console.error("Backend status:", error.response.status);
+        console.error("Backend response:", error.response.data);
       }
-
-      /*
-       * If Maya already moved to a preloaded question,
-       * do not interrupt the interview because the
-       * evaluation request failed.
-       */
     } finally {
       setIsProcessingAnswer(false);
     }
+  }
+
+  // =========================================================
+  // FINISH INTERVIEW
+  // =========================================================
+
+  function finishInterview(finalEvaluation, finalQuestion, finalAnswer) {
+    isInterviewStartedRef.current = false;
+    shouldListenRef.current = false;
+
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+
+    window.speechSynthesis.cancel();
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.log("Recognition already stopped.");
+      }
+    }
+
+    setIsSpeaking(false);
+    setIsListening(false);
+    setIsInterviewStarted(false);
+
+    const currentPerformance = performance;
+
+    const resultData = {
+      // The interview ID is required by the results page to load the
+      // authoritative performance data saved by the backend.
+      interviewId: setup?.interviewId || null,
+      interviewType: setup?.interviewType || "TECHNICAL",
+      targetRole: setup?.targetRole || "",
+      difficulty: setup?.difficulty || "",
+      technicalFocus: setup?.technicalFocus || "",
+      timeSeconds: seconds,
+      questionsAnswered: currentPerformance.questionsAnswered,
+      evaluations: currentPerformance.evaluations,
+      completed: true,
+    };
+
+    sessionStorage.setItem(
+      "interviewResults",
+      JSON.stringify(resultData)
+    );
+
+    if (setup?.interviewId) {
+      sessionStorage.setItem(
+        "interviewResultsInterviewId",
+        String(setup.interviewId)
+      );
+    }
+
+    navigate("/interview-results", {
+      state: { interviewId: setup?.interviewId || null },
+    });
   }
 
   // =========================================================
@@ -725,239 +794,268 @@ const [seconds, setSeconds] = useState(0);
   // =========================================================
   // MAYA TEXT TO SPEECH
   // =========================================================
+function speakQuestion(text) {
+  if (!text) {
+    console.log("No question to speak.");
+    return;
+  }
 
-  function speakQuestion(text) {
-    if (!text) {
-      console.log(
-        "No question to speak."
-      );
+  // ==========================================
+  // STOP MICROPHONE
+  // ==========================================
 
-      return;
+  shouldListenRef.current = false;
+
+  if (recognitionRef.current) {
+    try {
+      recognitionRef.current.stop();
+    } catch (error) {
+      console.log("Recognition already stopped.");
     }
+  }
 
-    // Make absolutely sure microphone is OFF
+  isListeningRef.current = false;
+  setIsListening(false);
+
+  // ==========================================
+  // STOP PREVIOUS SPEECH
+  // ==========================================
+
+  window.speechSynthesis.cancel();
+
+  // ==========================================
+  // CLEAN TEXT FOR SPEECH
+  // ==========================================
+
+  const speechText = String(text || "")
+    // Remove punctuation completely
+    .replace(/[.,!?;:()[\]{}"'“”‘’\-—_]/g, "")
+    // Remove any remaining symbols
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    // Normalise spaces
+    .replace(/\s+/g, " ")
+    .trim();
+
+  console.log("📝 Original Maya text:", text);
+  console.log("🔊 CLEAN Maya speech:", speechText);
+
+  if (!speechText) {
+    console.log("Nothing to speak after cleaning.");
+    return;
+  }
+
+  // ==========================================
+  // CREATE SPEECH
+  // ==========================================
+
+  const speech = new SpeechSynthesisUtterance();
+
+  // VERY IMPORTANT:
+  // Only the cleaned text goes into speech.text
+  speech.text = speechText;
+
+  // ==========================================
+  // VOICE
+  // ==========================================
+
+  const voices = window.speechSynthesis.getVoices();
+
+  const preferredVoice =
+    voices.find((voice) =>
+      voice.name.toLowerCase().includes("samantha")
+    ) ||
+    voices.find((voice) =>
+      voice.name.toLowerCase().includes("ava")
+    ) ||
+    voices.find((voice) =>
+      voice.name.toLowerCase().includes("google us english")
+    ) ||
+    voices.find(
+      (voice) =>
+        voice.lang === "en-US" &&
+        voice.localService === true
+    ) ||
+    voices.find((voice) =>
+      voice.lang.startsWith("en")
+    );
+
+  if (preferredVoice) {
+    speech.voice = preferredVoice;
+
+    console.log(
+      "Maya voice selected:",
+      preferredVoice.name,
+      preferredVoice.lang
+    );
+  }
+
+  // ==========================================
+  // VOICE SETTINGS
+  // ==========================================
+
+  speech.lang = "en-US";
+  speech.rate = 1.0;
+  speech.pitch = 1.05;
+  speech.volume = 1;
+
+  // ==========================================
+  // SPEECH START
+  // ==========================================
+
+  speech.onstart = () => {
+    console.log("Maya started speaking");
+
+    setIsSpeaking(true);
+
     shouldListenRef.current = false;
 
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
       } catch (error) {
-        console.log(
-          "Recognition already stopped."
-        );
+        console.log("Recognition already stopped.");
       }
     }
 
     isListeningRef.current = false;
-
     setIsListening(false);
+  };
 
-    // Stop any previous speech
-    window.speechSynthesis.cancel();
+  // ==========================================
+  // SPEECH BOUNDARY
+  // ==========================================
 
-    // Make sure speech engine is active
-    window.speechSynthesis.resume();
-
-    const speech =
-      new SpeechSynthesisUtterance();
-
-    // =========================
-    // TEXT
-    // =========================
-
-    speech.text = text;
-
-    // =========================
-    // FIND CLEAR ENGLISH VOICE
-    // =========================
-
-    const voices =
-      window.speechSynthesis.getVoices();
-
-    console.log(
-      "Available voices:",
-      voices.map(
-        (voice) => voice.name
-      )
-    );
-
-    const preferredVoice =
-      voices.find((voice) =>
-        voice.name
-          .toLowerCase()
-          .includes("samantha")
-      ) ||
-      voices.find((voice) =>
-        voice.name
-          .toLowerCase()
-          .includes("ava")
-      ) ||
-      voices.find((voice) =>
-        voice.name
-          .toLowerCase()
-          .includes(
-            "google us english"
-          )
-      ) ||
-      voices.find(
-        (voice) =>
-          voice.lang === "en-US" &&
-          voice.localService === true
-      ) ||
-      voices.find((voice) =>
-        voice.lang.startsWith("en")
-      );
-
-    if (preferredVoice) {
-      speech.voice =
-        preferredVoice;
-
-      console.log(
-        "Maya voice selected:",
-        preferredVoice.name,
-        preferredVoice.lang
-      );
-    } else {
-      console.log(
-        "No preferred voice found. Using browser default."
-      );
-    }
-
-    // =========================
-    // VOICE SETTINGS
-    // =========================
-
-    speech.lang = "en-US";
-
-    speech.rate = 0.82;
-
-    speech.pitch = 1.05;
-
-    speech.volume = 1;
-
-    // =========================
-    // SPEECH START
-    // =========================
-
-    speech.onstart = () => {
-      console.log(
-        "Maya started speaking"
-      );
-
-      setIsSpeaking(true);
-
-      // Microphone MUST remain OFF
-      shouldListenRef.current =
-        false;
-
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch (error) {
-          console.log(
-            "Recognition already stopped."
-          );
-        }
-      }
-
-      setIsListening(false);
-    };
-
-    // =========================
-    // SPEECH BOUNDARY
-    // =========================
-
-    speech.onboundary = (event) => {
+  speech.onboundary = (event) => {
+    if (event.name === "word") {
       console.log(
         "🗣️ Speech boundary:",
-        event.name,
-        "char:",
         event.charIndex
       );
 
       setSpeechBoundary(
         (previous) => previous + 1
       );
-    };
+    }
+  };
 
-    // =========================
-    // SPEECH END
-    // =========================
+  // ==========================================
+  // SPEECH END
+  // ==========================================
 
-    speech.onend = () => {
-      console.log(
-        "Maya finished speaking"
-      );
+speech.onend = () => {
+  console.log("Maya finished speaking");
 
-      setIsSpeaking(false);
+  setIsSpeaking(false);
 
-      // Prepare the next question while the
-      // candidate is thinking and answering.
-      if (
-        isInterviewStartedRef.current
-      ) {
-        preloadNextQuestion();
-      }
+  if (pendingFinishRef.current) {
+    const finalData = pendingFinishRef.current;
+    pendingFinishRef.current = null;
 
-      // ==========================================
-      // AUTOMATICALLY START MICROPHONE
-      // ==========================================
+    console.log("✅ Closing finished. Ending interview.");
 
-      if (
-        isInterviewStartedRef.current
-      ) {
-        console.log(
-          "🎙 Maya finished. Starting microphone..."
-        );
+    finishInterview(
+      finalData.evaluation,
+      finalData.question,
+      finalData.answer
+    );
 
-        setTimeout(() => {
-          startListening();
-        }, 300);
-      }
-    };
+    return;
+  }
 
-    // =========================
-    // SPEECH ERROR
-    // =========================
+  // If this was a correction, speak the next question now.
+  if (pendingNextQuestionRef.current) {
+    const nextQuestionToSpeak =
+      pendingNextQuestionRef.current;
 
-    speech.onerror = (event) => {
-      console.error(
-        "Maya speech error:",
-        event.error
-      );
+    pendingNextQuestionRef.current = null;
 
-      setIsSpeaking(false);
+    console.log(
+      "➡️ Correction finished. Speaking next question:",
+      nextQuestionToSpeak
+    );
 
-      /*
-       * If speech failed while the interview
-       * is active, still allow the candidate
-       * to answer.
-       */
-
-      if (
-        isInterviewStartedRef.current
-      ) {
-        setTimeout(() => {
-          startListening();
-        }, 300);
-      }
-    };
-
-    // =========================
-    // SPEAK
-    // =========================
+    setMayaResponseText(nextQuestionToSpeak);
 
     setTimeout(() => {
-      console.log(
-        "Speaking question:",
-        text
-      );
+      speakQuestion(nextQuestionToSpeak);
+    }, 300);
 
-      window.speechSynthesis.speak(
-        speech
-      );
-    }, 150);
+    return;
   }
+
+  // Normal behaviour: after the question finishes,
+  // start listening for the candidate's answer.
+  if (isInterviewStartedRef.current) {
+    console.log(
+      "🎙 Maya finished. Starting microphone..."
+    );
+
+    setTimeout(() => {
+      startListening();
+    }, 80);
+  }
+};
+
+  // ==========================================
+  // SPEECH ERROR
+  // ==========================================
+speech.onerror = (event) => {
+  console.error(
+    "Maya speech error:",
+    event.error
+  );
+
+  setIsSpeaking(false);
+
+  if (pendingFinishRef.current) {
+    const finalData = pendingFinishRef.current;
+    pendingFinishRef.current = null;
+
+    finishInterview(
+      finalData.evaluation,
+      finalData.question,
+      finalData.answer
+    );
+
+    return;
+  }
+
+  // If a next question is waiting after a correction,
+  // continue with that question instead of opening the microphone.
+  if (pendingNextQuestionRef.current) {
+    const nextQuestionToSpeak =
+      pendingNextQuestionRef.current;
+
+    pendingNextQuestionRef.current = null;
+
+    setMayaResponseText(nextQuestionToSpeak);
+
+    setTimeout(() => {
+      speakQuestion(nextQuestionToSpeak);
+    }, 300);
+
+    return;
+  }
+
+  if (isInterviewStartedRef.current) {
+    setTimeout(() => {
+      startListening();
+    }, 80);
+  }
+};
+  // ==========================================
+  // SPEAK
+  // ==========================================
+
+  console.log(
+    "🔊 FINAL TEXT SENT TO SPEECH ENGINE:",
+    speech.text
+  );
+
+  window.speechSynthesis.resume();
+
+  window.speechSynthesis.speak(speech);
+}
 
   // =========================================================
   // START INTERVIEW
@@ -1229,13 +1327,10 @@ const [seconds, setSeconds] = useState(0);
               "
             >
 
-              <GLBAvatarTest
-                speaking={isSpeaking}
-                speechBoundary={
-                  speechBoundary
-                }
-                height="100%"
-              />
+            <GLBAvatarTest
+  speaking={isSpeaking}
+  height="100%"
+/>
 
             </div>
 
@@ -1276,13 +1371,13 @@ const [seconds, setSeconds] = useState(0);
 
                   <p className="text-xs font-medium text-slate-500">
 
-                   {isSpeaking
-  ? "Speaking..."
-  : isListening
-  ? "Listening..."
-  : isHRInterview
-  ? "HR Interviewer"
-  : "Technical Interviewer"}
+                    {isSpeaking
+                      ? "Speaking..."
+                      : isListening
+                      ? "Listening..."
+                      : isHRInterview
+                      ? "HR Interviewer"
+                      : "Technical Interviewer"}
 
                   </p>
 
@@ -1292,41 +1387,6 @@ const [seconds, setSeconds] = useState(0);
 
             </div>
 
-            {/* ============================= */}
-            {/* INTERVIEW STATUS */}
-            {/* ============================= */}
-
-            {isInterviewStarted && (
-              <div className="absolute bottom-5 right-5 z-20">
-
-                <div
-                  className="
-                    rounded-full
-                    border
-                    border-white/60
-                    bg-white/90
-                    px-4
-                    py-2
-                    text-xs
-                    font-semibold
-                    text-slate-700
-                    shadow-sm
-                    backdrop-blur-md
-                  "
-                >
-
-                  {isSpeaking
-                    ? "🔊 Maya is speaking"
-                    : isListening
-                    ? "🎙 Listening..."
-                    : isProcessingAnswer
-                    ? "⏳ Evaluating your answer..."
-                    : "⏳ Preparing..."}
-
-                </div>
-
-              </div>
-            )}
 
           </div>
 
@@ -1352,7 +1412,7 @@ const [seconds, setSeconds] = useState(0);
             >
 
               <p className="text-center text-xs font-medium text-purple-600">
-                Maya
+                Maya · {isHRInterview ? "HR Interview" : "Technical Interview"}
               </p>
 
               <p
@@ -1366,7 +1426,7 @@ const [seconds, setSeconds] = useState(0);
                   md:text-base
                 "
               >
-                {currentQuestion}
+                {mayaResponseText || currentQuestion}
               </p>
 
             </div>

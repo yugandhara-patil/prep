@@ -3,15 +3,11 @@ package com.prep.backend.dto;
 public class AnswerRequest {
 
     private Long interviewId;
-
     private String userAnswer;
-
     private String currentQuestion;
+    private String stage;
 
-
-    public AnswerRequest() {
-    }
-
+    public AnswerRequest() {}
 
     public Long getInterviewId() {
         return interviewId;
@@ -21,7 +17,6 @@ public class AnswerRequest {
         this.interviewId = interviewId;
     }
 
-
     public String getUserAnswer() {
         return userAnswer;
     }
@@ -30,12 +25,19 @@ public class AnswerRequest {
         this.userAnswer = userAnswer;
     }
 
-
     public String getCurrentQuestion() {
         return currentQuestion;
     }
 
     public void setCurrentQuestion(String currentQuestion) {
         this.currentQuestion = currentQuestion;
+    }
+
+    public String getStage() {
+        return stage;
+    }
+
+    public void setStage(String stage) {
+        this.stage = stage;
     }
 }

@@ -1,38 +1,76 @@
 package com.prep.backend.dto;
 
-public class AnswerResponse {
+public class InterviewAnswerResultResponse {
 
+    private Long id;
+    private String question;
+    private String answer;
+    private String stage;
     private String evaluation;
     private String feedback;
-    private String nextQuestion;
-    private String nextStage;
-    private String nextCondition;
 
     private Integer communicationScore;
     private Integer technicalKnowledgeScore;
     private Integer projectKnowledgeScore;
     private Integer responseQualityScore;
 
-    public AnswerResponse() {}
+    public InterviewAnswerResultResponse() {
+    }
 
-    public AnswerResponse(
+    public InterviewAnswerResultResponse(
+            Long id,
+            String question,
+            String answer,
+            String stage,
             String evaluation,
             String feedback,
-            String nextQuestion,
-            String nextStage,
             Integer communicationScore,
             Integer technicalKnowledgeScore,
             Integer projectKnowledgeScore,
             Integer responseQualityScore
     ) {
+        this.id = id;
+        this.question = question;
+        this.answer = answer;
+        this.stage = stage;
         this.evaluation = evaluation;
         this.feedback = feedback;
-        this.nextQuestion = nextQuestion;
-        this.nextStage = nextStage;
         this.communicationScore = communicationScore;
         this.technicalKnowledgeScore = technicalKnowledgeScore;
         this.projectKnowledgeScore = projectKnowledgeScore;
         this.responseQualityScore = responseQualityScore;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getQuestion() {
+        return question;
+    }
+
+    public void setQuestion(String question) {
+        this.question = question;
+    }
+
+    public String getAnswer() {
+        return answer;
+    }
+
+    public void setAnswer(String answer) {
+        this.answer = answer;
+    }
+
+    public String getStage() {
+        return stage;
+    }
+
+    public void setStage(String stage) {
+        this.stage = stage;
     }
 
     public String getEvaluation() {
@@ -49,22 +87,6 @@ public class AnswerResponse {
 
     public void setFeedback(String feedback) {
         this.feedback = feedback;
-    }
-
-    public String getNextQuestion() {
-        return nextQuestion;
-    }
-
-    public void setNextQuestion(String nextQuestion) {
-        this.nextQuestion = nextQuestion;
-    }
-
-    public String getNextStage() {
-        return nextStage;
-    }
-
-    public void setNextStage(String nextStage) {
-        this.nextStage = nextStage;
     }
 
     public Integer getCommunicationScore() {

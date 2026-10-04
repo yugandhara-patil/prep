@@ -3,16 +3,20 @@ package com.prep.backend.controller;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
-import com.prep.backend.dto.NextQuestionRequest;
-import com.prep.backend.dto.NextQuestionResponse;
+
 import com.prep.backend.dto.AnswerRequest;
 import com.prep.backend.dto.AnswerResponse;
+import com.prep.backend.dto.InterviewResultResponse;
+import com.prep.backend.dto.NextQuestionRequest;
+import com.prep.backend.dto.NextQuestionResponse;
 import com.prep.backend.dto.StartInterviewRequest;
 import com.prep.backend.dto.StartInterviewResponse;
 import com.prep.backend.service.InterviewService;
@@ -86,22 +90,54 @@ public class InterviewController {
 
         return ResponseEntity.ok(response);
     }
+
+
+    // =========================================================
+    // GENERATE NEXT QUESTION
+    // =========================================================
+
     @PostMapping(
-        value = "/next-question",
-        consumes = MediaType.APPLICATION_JSON_VALUE
-)
-public ResponseEntity<NextQuestionResponse> generateNextQuestion(
-        Authentication authentication,
-        @RequestBody NextQuestionRequest request
-) {
-    String email = authentication.getName();
+            value = "/next-question",
+            consumes = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<NextQuestionResponse> generateNextQuestion(
+            Authentication authentication,
 
-    NextQuestionResponse response =
-            interviewService.generateNextQuestion(
-                    email,
-                    request
-            );
+            @RequestBody
+            NextQuestionRequest request
+    ) {
 
-    return ResponseEntity.ok(response);
-}
+        String email = authentication.getName();
+
+        NextQuestionResponse response =
+                interviewService.generateNextQuestion(
+                        email,
+                        request
+                );
+
+        return ResponseEntity.ok(response);
+    }
+
+
+    // =========================================================
+    // GET INTERVIEW RESULTS
+    // =========================================================
+
+    @GetMapping("/{interviewId}/results")
+    public ResponseEntity<InterviewResultResponse> getInterviewResults(
+            Authentication authentication,
+
+            @PathVariable Long interviewId
+    ) {
+
+        String email = authentication.getName();
+
+        InterviewResultResponse response =
+                interviewService.getInterviewResults(
+                        email,
+                        interviewId
+                );
+
+        return ResponseEntity.ok(response);
+    }
 }

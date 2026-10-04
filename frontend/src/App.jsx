@@ -12,6 +12,7 @@ import ProtectedRoute from "./routes/ProtectedRoute";
 import Profile from "./pages/Profile";
 import StartInterview from "./pages/StartInterview";
 import Interview from "./pages/Interview";
+import InterviewResults from "./pages/InterviewResults";
 import PracticeQuestions from "./pages/PracticeQuestions";
 import PracticeTest from "./pages/PracticeTest";
 import PracticeResults from "./pages/PracticeResults";
@@ -72,6 +73,14 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+  path="/interview-results"
+  element={
+    <ProtectedRoute>
+      <InterviewResults />
+    </ProtectedRoute>
+  }
+/>
         <Route
   path="/practice-questions"
   element={

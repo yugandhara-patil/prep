@@ -24,7 +24,8 @@ public class GeminiService {
 
         String url =
                 "https://generativelanguage.googleapis.com/v1beta/models/"
-+ "gemini-3.5-flash:generateContent";
+                + "gemini-3.5-flash-lite:generateContent";
+
         Map<String, Object> body = Map.of(
                 "contents", List.of(
                         Map.of(
@@ -35,8 +36,7 @@ public class GeminiService {
                 )
         );
 
-        // Try Gemini up to 3 times
-        for (int attempt = 1; attempt <= 3; attempt++) {
+        for (int attempt = 1; attempt <= 4; attempt++) {
 
             try {
 
@@ -52,35 +52,18 @@ public class GeminiService {
 
             } catch (HttpServerErrorException.ServiceUnavailable exception) {
 
-                // Gemini returned 503 - temporarily unavailable
-                if (attempt == 3) {
-
+                if (attempt == 4) {
                     throw new RuntimeException(
                             "Gemini is temporarily unavailable. Please try again.",
                             exception
                     );
                 }
 
-                try {
-
-                    // Wait 2 seconds before trying again
-                    Thread.sleep(2000);
-
-                } catch (InterruptedException interruptedException) {
-
-                    Thread.currentThread().interrupt();
-
-                    throw new RuntimeException(
-                            "Gemini request was interrupted",
-                            interruptedException
-                    );
-                }
+                sleepBeforeRetry(attempt);
             }
         }
 
-        throw new RuntimeException(
-                "Unable to generate interview question"
-        );
+        throw new RuntimeException("Unable to generate interview question");
     }
 
 
@@ -92,7 +75,8 @@ public class GeminiService {
 
         String url =
                 "https://generativelanguage.googleapis.com/v1beta/models/"
-+ "gemini-3.5-flash:generateContent";
+                + "gemini-3.5-flash-lite:generateContent";
+
         Map<String, Object> body = Map.of(
                 "contents", List.of(
                         Map.of(
@@ -106,8 +90,10 @@ public class GeminiService {
                 )
         );
 
-        // Try Gemini up to 3 times
-        for (int attempt = 1; attempt <= 3; attempt++) {
+        // Retry temporary Gemini 503 errors.
+        // If Gemini remains unavailable, return a valid fallback
+        // so a temporary outage does not turn into HTTP 500.
+        for (int attempt = 1; attempt <= 4; attempt++) {
 
             try {
 
@@ -123,35 +109,33 @@ public class GeminiService {
 
             } catch (HttpServerErrorException.ServiceUnavailable exception) {
 
-                // Gemini returned 503 - temporarily unavailable
-                if (attempt == 3) {
+                System.err.println(
+                        "Gemini 503 during live interview. Attempt "
+                                + attempt + "/4"
+                );
 
-                    throw new RuntimeException(
-                            "Gemini is temporarily unavailable. Please try again.",
-                            exception
-                    );
+                if (attempt == 4) {
+
+                    return """
+                            {
+                              "evaluation": "PARTIALLY_CORRECT",
+                              "feedback": "Let's continue.",
+                              "nextQuestion": "Could you tell me a little more about that?"
+                            }
+                            """;
                 }
 
-                try {
-
-                    // Wait 1 second before retrying
-                    Thread.sleep(1000);
-
-                } catch (InterruptedException interruptedException) {
-
-                    Thread.currentThread().interrupt();
-
-                    throw new RuntimeException(
-                            "Gemini request was interrupted",
-                            interruptedException
-                    );
-                }
+                sleepBeforeRetry(attempt);
             }
         }
 
-        throw new RuntimeException(
-                "Unable to generate interview response"
-        );
+        return """
+                {
+                  "evaluation": "PARTIALLY_CORRECT",
+                  "feedback": "Let's continue.",
+                  "nextQuestion": "Could you tell me a little more about that?"
+                }
+                """;
     }
 
 
@@ -178,7 +162,6 @@ public class GeminiService {
                 )
         );
 
-        // Try Gemini up to 3 times
         for (int attempt = 1; attempt <= 3; attempt++) {
 
             try {
@@ -222,6 +205,41 @@ public class GeminiService {
         throw new RuntimeException(
                 "Unable to generate practice questions"
         );
+    }
+
+
+    // =========================================================
+    // SHORT RETRY DELAY FOR LIVE INTERVIEW
+    // =========================================================
+
+    private void sleepBeforeRetry(int attempt) {
+
+        long delay;
+
+        switch (attempt) {
+            case 1 -> delay = 700;
+            case 2 -> delay = 1200;
+            case 3 -> delay = 2000;
+            default -> delay = 0;
+        }
+
+        if (delay == 0) {
+            return;
+        }
+
+        try {
+
+            Thread.sleep(delay);
+
+        } catch (InterruptedException interruptedException) {
+
+            Thread.currentThread().interrupt();
+
+            throw new RuntimeException(
+                    "Gemini request was interrupted",
+                    interruptedException
+            );
+        }
     }
 
 
