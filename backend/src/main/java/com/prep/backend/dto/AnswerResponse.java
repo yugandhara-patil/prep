@@ -7,6 +7,7 @@ public class AnswerResponse {
     private String nextQuestion;
     private String nextStage;
     private String nextCondition;
+    private String nextHow;
 
     private Integer communicationScore;
     private Integer technicalKnowledgeScore;
@@ -59,13 +60,29 @@ public class AnswerResponse {
         this.nextQuestion = nextQuestion;
     }
 
-    public String getNextStage() {
-        return nextStage;
-    }
+public String getNextStage() {
+    return nextStage;
+}
 
-    public void setNextStage(String nextStage) {
-        this.nextStage = nextStage;
-    }
+public void setNextStage(String nextStage) {
+    this.nextStage = nextStage;
+}
+
+public String getNextCondition() {
+    return nextCondition;
+}
+
+public void setNextCondition(String nextCondition) {
+    this.nextCondition = nextCondition;
+}
+
+public String getNextHow() {
+    return nextHow;
+}
+
+public void setNextHow(String nextHow) {
+    this.nextHow = nextHow;
+}
 
     public Integer getCommunicationScore() {
         return communicationScore;

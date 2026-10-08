@@ -1,6 +1,9 @@
 package com.prep.backend.service;
 
 import java.util.List;
+import java.time.LocalDateTime;
+
+import com.prep.backend.entity.InterviewStatus;
 
 import org.springframework.stereotype.Service;
 
@@ -118,10 +121,22 @@ public class InterviewService {
 
         stage = stage.trim().toUpperCase();
 
-        String nextStage = interviewFlowService.determineNextStage(
-                interview.getInterviewType(),
-                stage
-        );
+        String nextStage;
+
+        if ("START_PERMISSION".equals(stage)
+                && interview.getInterviewType() != InterviewType.HR) {
+
+            nextStage = interviewFlowService.determineStartPermissionStage(
+                    request.getUserAnswer()
+            );
+
+        } else {
+
+            nextStage = interviewFlowService.determineNextStage(
+                    interview.getInterviewType(),
+                    stage
+            );
+        }
 
         List<InterviewAnswer> previousAnswers =
                 interviewAnswerRepository.findByInterviewOrderByIdAsc(
@@ -150,15 +165,30 @@ public class InterviewService {
          * Persist the candidate's answer only after Gemini has produced
          * a valid evaluation and next question.
          */
-        interviewAnswerService.saveAnswer(
-                interview,
-                request,
-                answerResponse,
-                stage
-        );
+       interviewAnswerService.saveAnswer(
+        interview,
+        request,
+        answerResponse,
+        stage
+);
 
-        return answerResponse;
-    }
+// Mark the interview as completed when the closing stage is reached.
+if ("CLOSING".equals(nextStage)) {
+
+    interview.setStatus(
+            InterviewStatus.COMPLETED
+    );
+
+    interview.setCompletedAt(
+            LocalDateTime.now()
+    );
+
+    interviewRepository.save(
+            interview
+    );
+}
+
+        return answerResponse;    }
 
     /**
      * Generates the next question when the frontend explicitly requests one.

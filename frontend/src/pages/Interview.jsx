@@ -287,39 +287,20 @@ function Interview() {
     // =========================
     // RECOGNITION RESULTS
     // =========================
-recognition.onresult = (event) => {
-  let completeTranscript = "";
+    recognition.onresult = (event) => {
+      let completeTranscript = "";
 
-  for (let i = 0; i < event.results.length; i++) {
-    completeTranscript += event.results[i][0].transcript + " ";
-  }
+      for (let i = 0; i < event.results.length; i++) {
+        completeTranscript += event.results[i][0].transcript + " ";
+      }
 
-  completeTranscript = cleanTranscript(completeTranscript);
+      completeTranscript = cleanTranscript(completeTranscript);
 
-  console.log("📝 Transcript:", completeTranscript);
+      console.log("📝 Transcript:", completeTranscript);
 
-  transcriptRef.current = completeTranscript;
-  setTranscript(completeTranscript);
-
-  // Reset silence timer whenever speech is detected
-  if (silenceTimerRef.current) {
-    clearTimeout(silenceTimerRef.current);
-  }
-
-  // Short answers such as "Yes", "No", "I'm good" are usually
-  // returned as final results. Give them a short settling period
-  // before submitting instead of waiting for another speech event.
-  silenceTimerRef.current = setTimeout(() => {
-    if (transcriptRef.current.trim()) {
-      console.log(
-        "🤫 Silence detected. Submitting answer:",
-        transcriptRef.current
-      );
-
-      stopListening();
-    }
-  }, 1400);
-};
+      transcriptRef.current = completeTranscript;
+      setTranscript(completeTranscript);
+    };
 
     // =========================
     // RECOGNITION ERROR
@@ -559,11 +540,31 @@ recognition.onresult = (event) => {
 
       askedQuestionsRef.current.push(nextQuestion);
 
-      conversationStageRef.current = nextStage;
-      setConversationStage(nextStage);
+      // =========================================================
+      // STAGE / QUESTION UPDATE
+      // =========================================================
+      const evaluationType = String(evaluation).toUpperCase();
 
-      currentQuestionRef.current = nextQuestion;
-      setCurrentQuestion(nextQuestion);
+      const isCorrection =
+        evaluationType === "INCORRECT" ||
+        evaluationType === "PARTIALLY_CORRECT";
+
+      if (isCorrection) {
+        // Keep the ORIGINAL question active.
+        // The candidate must answer the same question again.
+        conversationStageRef.current = stageBeingAnswered;
+        setConversationStage(stageBeingAnswered);
+
+        currentQuestionRef.current = questionBeingAnswered;
+        setCurrentQuestion(questionBeingAnswered);
+      } else {
+        // Normal interview flow.
+        conversationStageRef.current = nextStage;
+        setConversationStage(nextStage);
+
+        currentQuestionRef.current = nextQuestion;
+        setCurrentQuestion(nextQuestion);
+      }
 
       transcriptRef.current = "";
       setTranscript("");
@@ -571,13 +572,6 @@ recognition.onresult = (event) => {
  // =========================================================
 // MAYA SPOKEN RESPONSE
 // =========================================================
-
-const evaluationType =
-        String(evaluation).toUpperCase();
-
-      const isCorrection =
-        evaluationType === "INCORRECT" ||
-        evaluationType === "PARTIALLY_CORRECT";
 
       const isCandidateQuestionsClosing =
         stageBeingAnswered === "CANDIDATE_QUESTIONS" &&
@@ -636,10 +630,14 @@ const evaluationType =
   }
 }
 
-        pendingNextQuestionRef.current = nextQuestion;
+        // Maya only gives the correction.
+        // She must NOT speak the next question yet.
+        // After the correction finishes, the microphone will start
+        // so the candidate can answer the SAME question again.
+        pendingNextQuestionRef.current = null;
 
         console.log("🗣 Maya correction:", spokenFeedback);
-        console.log("➡️ Next question waiting:", nextQuestion);
+        console.log("🔁 Candidate will retry:", questionBeingAnswered);
 
         setMayaResponseText(spokenFeedback);
         speakQuestion(spokenFeedback);
@@ -962,29 +960,8 @@ speech.onend = () => {
     return;
   }
 
-  // If this was a correction, speak the next question now.
-  if (pendingNextQuestionRef.current) {
-    const nextQuestionToSpeak =
-      pendingNextQuestionRef.current;
-
-    pendingNextQuestionRef.current = null;
-
-    console.log(
-      "➡️ Correction finished. Speaking next question:",
-      nextQuestionToSpeak
-    );
-
-    setMayaResponseText(nextQuestionToSpeak);
-
-    setTimeout(() => {
-      speakQuestion(nextQuestionToSpeak);
-    }, 300);
-
-    return;
-  }
-
-  // Normal behaviour: after the question finishes,
-  // start listening for the candidate's answer.
+  // After Maya finishes speaking, start listening
+  // for the candidate's answer.
   if (isInterviewStartedRef.current) {
     console.log(
       "🎙 Maya finished. Starting microphone..."
@@ -1016,23 +993,6 @@ speech.onerror = (event) => {
       finalData.question,
       finalData.answer
     );
-
-    return;
-  }
-
-  // If a next question is waiting after a correction,
-  // continue with that question instead of opening the microphone.
-  if (pendingNextQuestionRef.current) {
-    const nextQuestionToSpeak =
-      pendingNextQuestionRef.current;
-
-    pendingNextQuestionRef.current = null;
-
-    setMayaResponseText(nextQuestionToSpeak);
-
-    setTimeout(() => {
-      speakQuestion(nextQuestionToSpeak);
-    }, 300);
 
     return;
   }
@@ -1467,6 +1427,37 @@ speech.onerror = (event) => {
 
             </div>
           )}
+
+        {/* ============================= */}
+        {/* FINISH ANSWER BUTTON */}
+        {/* ============================= */}
+
+        {isInterviewStarted && isListening && (
+          <div className="mt-3 flex justify-center">
+            <button
+              type="button"
+              onClick={stopListening}
+              disabled={isProcessingAnswer}
+              className="
+                rounded-xl
+                bg-purple-600
+                px-6
+                py-2.5
+                text-sm
+                font-semibold
+                text-white
+                shadow-sm
+                transition
+                hover:bg-purple-700
+                disabled:cursor-not-allowed
+                disabled:opacity-50
+                md:text-base
+              "
+            >
+              {isProcessingAnswer ? "Processing..." : "Finish Answer"}
+            </button>
+          </div>
+        )}
 
       </main>
 

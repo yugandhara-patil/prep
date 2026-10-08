@@ -16,6 +16,7 @@ import InterviewResults from "./pages/InterviewResults";
 import PracticeQuestions from "./pages/PracticeQuestions";
 import PracticeTest from "./pages/PracticeTest";
 import PracticeResults from "./pages/PracticeResults";
+import OverallPerformance from "./pages/OverallPerformance";
 import GLBAvatarTest from "./pages/GLBAvatarTest";
 
 function App() {
@@ -73,6 +74,14 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+  path="/overall-performance"
+  element={
+    <ProtectedRoute>
+      <OverallPerformance />
+    </ProtectedRoute>
+  }
+/>
         <Route
   path="/interview-results"
   element={

@@ -136,11 +136,15 @@ public class InterviewQuestionService {
 
 
 
-        if ("START_PERMISSION".equals(nextStage)) {
+       if ("START_PERMISSION".equals(stage)
+        && "START_PERMISSION".equals(nextStage)) {
 
-            prompt += "\nSPECIAL INSTRUCTION: Return this exact nextQuestion: Great. Shall we begin?\n";
+    prompt += "\nSPECIAL INSTRUCTION: The candidate said they are not ready to begin yet. Return this exact nextQuestion: Of course. Take your time. Let me know when you're ready. Do not ask another question.\n";
 
-        } else if ("CANDIDATE_QUESTIONS".equals(stage)
+} else if ("START_PERMISSION".equals(nextStage)) {
+
+    prompt += "\nSPECIAL INSTRUCTION: Return this exact nextQuestion: Great. Shall we begin?\n";
+}else if ("CANDIDATE_QUESTIONS".equals(stage)
 
                 && interviewEvaluationService.isNoCandidateQuestionAnswer(request.getUserAnswer())) {
 
@@ -184,11 +188,10 @@ public class InterviewQuestionService {
 
             answerResponse.setNextQuestion("How are you doing today?");
 
-        } else if ("START_PERMISSION".equals(nextStage)) {
-
-            answerResponse.setNextQuestion("Great. Shall we begin?");
-
-        } else if ("INTRODUCTION".equals(nextStage)) {
+} else if ("START_PERMISSION".equals(nextStage)) {    answerResponse.setNextQuestion(
+            "Great. Shall we begin?"
+    );
+} else if ("INTRODUCTION".equals(nextStage)) {
 
             answerResponse.setNextQuestion(
 
@@ -346,9 +349,11 @@ public class InterviewQuestionService {
 
                     + "8. Close by thanking the candidate and saying the team will update them regarding the next steps.\n"
 
-                    + "9. EASY means fundamentals and straightforward questions. MEDIUM means practical application and moderate problem-solving. HARD means deeper concepts, edge cases, trade-offs, architecture/design reasoning, or challenging coding/problem-solving.\n"
-
-                    + "10. HARD must make questions more difficult, not make the interview longer.\n\n"
+                 + "9. Difficulty rules:\n"
++ "EASY: Test basic definitions, fundamentals, purpose, and straightforward usage.\n"
++ "MEDIUM: Make the questions noticeably harder than EASY. Test practical application, reasoning, comparisons, debugging, real-world scenarios, and choosing between different approaches. Ask the candidate to explain WHY, not only WHAT. Require the candidate to apply concepts to a realistic situation rather than simply define them.\n"
++ "HARD: Test advanced understanding through edge cases, trade-offs, architecture, system design, optimisation, advanced debugging, and complex problem-solving.\n"
++ "10. Difficulty changes the complexity and depth of the questions, NOT the number of questions. The interview must still contain exactly three project questions and exactly six technical questions.\n\n"
 
                     + "Use the previous question to determine the next stage. Do not jump directly to a technical question after the opening greeting.\n\n"
 

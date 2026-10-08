@@ -80,6 +80,87 @@ public class InterviewFlowService {
         };
     }
 
+    /**
+     * Checks whether the candidate is ready to begin the interview.
+     */
+    public boolean isReadyToStart(String answer) {
+        if (answer == null) {
+            return false;
+        }
+
+        String normalized = answer
+                .trim()
+                .toLowerCase()
+                .replaceAll("[^a-z\\s']", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+
+        return normalized.equals("yes")
+                || normalized.equals("yeah")
+                || normalized.equals("yep")
+                || normalized.equals("sure")
+                || normalized.equals("okay")
+                || normalized.equals("ok")
+                || normalized.equals("alright")
+                || normalized.equals("ready")
+                || normalized.equals("i'm ready")
+                || normalized.equals("im ready")
+                || normalized.equals("i am ready")
+                || normalized.equals("lets begin")
+                || normalized.equals("let's begin")
+                || normalized.equals("lets start")
+                || normalized.equals("let's start");
+    }
+
+    /**
+     * Checks whether the candidate is not ready to begin yet.
+     */
+    public boolean isNotReadyToStart(String answer) {
+        if (answer == null) {
+            return false;
+        }
+
+        String normalized = answer
+                .trim()
+                .toLowerCase()
+                .replaceAll("[^a-z\\s']", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+
+        return normalized.equals("no")
+                || normalized.equals("nope")
+                || normalized.equals("not yet")
+                || normalized.equals("not now")
+                || normalized.equals("wait")
+                || normalized.equals("give me a minute")
+                || normalized.equals("give me a moment")
+                || normalized.equals("one minute")
+                || normalized.equals("one moment")
+                || normalized.equals("hold on");
+    }
+
+    /**
+     * Returns the next stage based on the candidate's response
+     * to "Great. Shall we begin?"
+     *
+     * YES / READY -> INTRODUCTION
+     * NO / NOT READY -> remain at START_PERMISSION
+     */
+    public String determineStartPermissionStage(String answer) {
+        if (isNotReadyToStart(answer)) {
+            return "START_PERMISSION";
+        }
+
+        if (isReadyToStart(answer)) {
+            return "INTRODUCTION";
+        }
+
+        // If the response is unclear, keep Maya at the
+        // start-permission stage rather than accidentally
+        // starting the interview.
+        return "START_PERMISSION";
+    }
+
     public boolean isTechnicalStage(String stage) {
         if (stage == null) {
             return false;
