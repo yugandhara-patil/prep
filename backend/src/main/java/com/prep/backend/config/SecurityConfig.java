@@ -39,12 +39,14 @@ public class SecurityConfig {
         CorsConfiguration configuration =
                 new CorsConfiguration();
 
-        configuration.setAllowedOrigins(
-        List.of(
-                "http://localhost:5173",
-                "https://prep-chi-nine.vercel.app"
-        )
-);
+        configuration.setAllowedOriginPatterns(
+                List.of(
+                        "http://localhost:*",
+                        "http://127.0.0.1:*",
+                        "https://prep-chi-nine.vercel.app",
+                        "https://*.vercel.app"
+                )
+        );
 
         configuration.setAllowedMethods(
                 List.of(
@@ -110,9 +112,12 @@ public class SecurityConfig {
                         )
                         .permitAll()
 
-                        // Public authentication endpoints
+                        // Public authentication endpoints, profile photos, uploads & TTS synthesis
                         .requestMatchers(
-                                "/api/auth/**"
+                                "/api/auth/**",
+                                "/api/profile/photo/**",
+                                "/uploads/**",
+                                "/api/interviews/tts"
                         )
                         .permitAll()
 

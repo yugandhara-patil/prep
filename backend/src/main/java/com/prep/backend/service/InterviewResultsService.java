@@ -1832,17 +1832,12 @@ public class InterviewResultsService {
     
     
                 areasToImprove.add(
-    
-    
-    
                         "Improve answer relevance, completeness, and reasoning"
-    
-    
-    
                 );
-    
-    
-    
+            }
+
+            if (areasToImprove.isEmpty() && totalQuestions > 0) {
+                areasToImprove.add("Deepen Edge-Case & Architecture Details: Solid performance demonstrated across all rubric areas. To further stand out in senior hiring rounds, proactively discuss scalability trade-offs and edge-case failure modes.");
             }
     
     
@@ -1927,22 +1922,19 @@ public class InterviewResultsService {
     
     
     
-            // ---------------------------------------------------------
-    
-    
-    
-            // RETURN FINAL RESULTS
-    
-    
-    
-            // ---------------------------------------------------------
-    
-    
-    
-    
-    
-    
-    
+            long duration = 0;
+            if (interview.getStartedAt() != null) {
+                java.time.LocalDateTime end = interview.getCompletedAt() != null
+                        ? interview.getCompletedAt()
+                        : java.time.LocalDateTime.now();
+                try {
+                    duration = java.time.Duration.between(interview.getStartedAt(), end).getSeconds();
+                    if (duration < 0) duration = 0;
+                } catch (Exception ignored) {}
+            }
+            response.setTimeSeconds(duration);
+            response.setDurationSeconds(duration);
+
             return response;
     
     

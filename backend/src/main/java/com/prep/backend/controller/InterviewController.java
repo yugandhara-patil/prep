@@ -19,6 +19,7 @@ import com.prep.backend.dto.NextQuestionRequest;
 import com.prep.backend.dto.NextQuestionResponse;
 import com.prep.backend.dto.StartInterviewRequest;
 import com.prep.backend.dto.StartInterviewResponse;
+import com.prep.backend.service.GeminiService;
 import com.prep.backend.service.InterviewService;
 
 @RestController
@@ -26,11 +27,14 @@ import com.prep.backend.service.InterviewService;
 public class InterviewController {
 
     private final InterviewService interviewService;
+    private final GeminiService geminiService;
 
     public InterviewController(
-            InterviewService interviewService
+            InterviewService interviewService,
+            GeminiService geminiService
     ) {
         this.interviewService = interviewService;
+        this.geminiService = geminiService;
     }
 
 
@@ -139,5 +143,77 @@ public class InterviewController {
                 );
 
         return ResponseEntity.ok(response);
+    }
+
+
+    // =========================================================
+    // RESUME UNFINISHED INTERVIEW
+    // =========================================================
+
+    @GetMapping("/{interviewId}/resume")
+    public ResponseEntity<java.util.Map<String, Object>> resumeInterview(
+            Authentication authentication,
+
+            @PathVariable Long interviewId
+    ) {
+
+        String email = authentication.getName();
+
+        java.util.Map<String, Object> response =
+                interviewService.resumeInterview(
+                        email,
+                        interviewId
+                );
+
+        return ResponseEntity.ok(response);
+    }
+
+
+    // =========================================================
+    // DISCARD UNFINISHED INTERVIEW
+    // =========================================================
+
+    @org.springframework.web.bind.annotation.DeleteMapping("/{interviewId}")
+    public ResponseEntity<com.prep.backend.dto.MessageResponse> discardInterview(
+            Authentication authentication,
+
+            @PathVariable Long interviewId
+    ) {
+
+        String email = authentication.getName();
+
+        com.prep.backend.dto.MessageResponse response =
+                interviewService.discardInterview(
+                        email,
+                        interviewId
+                );
+
+        return ResponseEntity.ok(response);
+    }
+
+    // =========================================================
+    // SYNTHESIZE MAYA SPEECH (CONSISTENT CLOUD TTS)
+    // =========================================================
+
+    @PostMapping(value = "/tts", produces = "audio/wav")
+    public ResponseEntity<byte[]> synthesizeMayaSpeech(
+            @RequestBody java.util.Map<String, String> request
+    ) {
+        String text = request.get("text");
+        if (text == null || text.trim().isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        try {
+            byte[] wavAudio = geminiService.synthesizeSpeech(text.trim());
+
+            return ResponseEntity.ok()
+                    .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, "audio/wav")
+                    .header(org.springframework.http.HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                    .body(wavAudio);
+        } catch (Exception ex) {
+            System.err.println("Cloud TTS unavailable: " + ex.getMessage());
+            return ResponseEntity.status(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
     }
 }

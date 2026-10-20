@@ -24,6 +24,9 @@ public class InterviewResultResponse {
     private List<String> strengths;
     private List<String> areasToImprove;
 
+    private Long timeSeconds;
+    private Long durationSeconds;
+
     private List<InterviewAnswerResultResponse> answers;
 
     public InterviewResultResponse() {
@@ -163,5 +166,21 @@ public class InterviewResultResponse {
 
     public void setAnswers(List<InterviewAnswerResultResponse> answers) {
         this.answers = answers;
+    }
+
+    public Long getTimeSeconds() {
+        return timeSeconds;
+    }
+
+    public void setTimeSeconds(Long timeSeconds) {
+        this.timeSeconds = timeSeconds;
+    }
+
+    public Long getDurationSeconds() {
+        return durationSeconds;
+    }
+
+    public void setDurationSeconds(Long durationSeconds) {
+        this.durationSeconds = durationSeconds;
     }
 }

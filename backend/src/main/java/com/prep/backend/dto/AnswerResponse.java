@@ -1,5 +1,8 @@
 package com.prep.backend.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class AnswerResponse {
 
     private String evaluation;
@@ -13,6 +16,7 @@ public class AnswerResponse {
     private Integer technicalKnowledgeScore;
     private Integer projectKnowledgeScore;
     private Integer responseQualityScore;
+    private Boolean conversationalRemark;
 
     public AnswerResponse() {}
 
@@ -114,5 +118,17 @@ public void setNextHow(String nextHow) {
 
     public void setResponseQualityScore(Integer responseQualityScore) {
         this.responseQualityScore = responseQualityScore;
+    }
+
+    public Boolean getConversationalRemark() {
+        return conversationalRemark;
+    }
+
+    public void setConversationalRemark(Boolean conversationalRemark) {
+        this.conversationalRemark = conversationalRemark;
+    }
+
+    public boolean isConversationalRemark() {
+        return Boolean.TRUE.equals(conversationalRemark);
     }
 }

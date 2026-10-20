@@ -98,6 +98,146 @@ public class InterviewQuestionService {
 
     ) {
 
+        // Check for conversational remarks, insults, clarification requests, or unrelated comments
+        if (interviewEvaluationService.isConversationalRemark(request.getUserAnswer(), request.getCurrentQuestion(), stage)) {
+            return interviewEvaluationService.buildConversationalRemarkResponse(
+                    request.getUserAnswer(),
+                    request.getCurrentQuestion(),
+                    stage,
+                    user
+            );
+        }
+
+        // Fast-path for deterministic conversational stages (0ms AI latency)
+        if ("GREETING".equals(stage)) {
+            AnswerResponse answerResponse = new AnswerResponse();
+            answerResponse.setEvaluation("CORRECT");
+            answerResponse.setFeedback("");
+            answerResponse.setNextQuestion("How are you doing today?");
+            answerResponse.setNextStage("WELLBEING");
+            answerResponse.setCommunicationScore(90);
+            answerResponse.setResponseQualityScore(90);
+            return answerResponse;
+        }
+
+        if ("WELLBEING".equals(stage)) {
+            AnswerResponse answerResponse = new AnswerResponse();
+            answerResponse.setEvaluation("CORRECT");
+            answerResponse.setFeedback("");
+            answerResponse.setNextQuestion("Great. Shall we begin?");
+            answerResponse.setNextStage("START_PERMISSION");
+            answerResponse.setCommunicationScore(90);
+            answerResponse.setResponseQualityScore(90);
+            return answerResponse;
+        }
+
+        if ("START_PERMISSION".equals(stage)) {
+            AnswerResponse answerResponse = new AnswerResponse();
+            answerResponse.setEvaluation("CORRECT");
+            answerResponse.setFeedback("");
+            answerResponse.setCommunicationScore(90);
+            answerResponse.setResponseQualityScore(90);
+            if ("START_PERMISSION".equals(nextStage)) {
+                answerResponse.setNextQuestion("Of course. Take your time. Let me know when you're ready.");
+                answerResponse.setNextStage("START_PERMISSION");
+            } else {
+                answerResponse.setNextQuestion("So, " + user.getFullName() + ", could you please introduce yourself?");
+                answerResponse.setNextStage("INTRODUCTION");
+            }
+            return answerResponse;
+        }
+
+        // Candidate Questions Stage Handling
+        if ("CANDIDATE_QUESTIONS".equals(stage)) {
+            // Case 1: Finished signal -> proceed to closing
+            if ("CLOSING".equals(nextStage) || interviewFlowService.isNoCandidateQuestionAnswer(request.getUserAnswer())) {
+                AnswerResponse answerResponse = new AnswerResponse();
+                answerResponse.setEvaluation("CORRECT");
+                answerResponse.setFeedback("");
+                answerResponse.setNextQuestion("Thank you so much for your time today, " + user.getFullName() + ". It was a pleasure speaking with you. Our recruitment team will review your interview and be in touch regarding the next steps. Have a great day!");
+                answerResponse.setNextStage("CLOSING");
+                answerResponse.setCommunicationScore(90);
+                answerResponse.setResponseQualityScore(90);
+                return answerResponse;
+            }
+
+            // Case 2: Unclear response -> ask to repeat or clarify
+            if (interviewFlowService.isUnclearCandidateResponse(request.getUserAnswer())) {
+                AnswerResponse answerResponse = new AnswerResponse();
+                answerResponse.setEvaluation("CORRECT");
+                answerResponse.setFeedback("");
+                answerResponse.setNextQuestion("I didn't quite catch that. Could you please repeat your question, or let me know if you don't have any questions?");
+                answerResponse.setNextStage("CANDIDATE_QUESTIONS");
+                answerResponse.setCommunicationScore(85);
+                answerResponse.setResponseQualityScore(85);
+                return answerResponse;
+            }
+
+            // Case 3: Affirmative signal ("Yes", "I have a question") without asking yet
+            if (interviewFlowService.isCandidateAskingToAsk(request.getUserAnswer())) {
+                AnswerResponse answerResponse = new AnswerResponse();
+                answerResponse.setEvaluation("CORRECT");
+                answerResponse.setFeedback("");
+                answerResponse.setNextQuestion("Of course! Please go ahead and ask your question.");
+                answerResponse.setNextStage("CANDIDATE_QUESTIONS");
+                answerResponse.setCommunicationScore(90);
+                answerResponse.setResponseQualityScore(90);
+                return answerResponse;
+            }
+
+            // Case 4: Candidate asks an actual question -> Maya answers it using Gemini
+            String role = interview.getTargetRole() != null ? interview.getTargetRole() : "Software Engineer";
+            String interviewTypeStr = interview.getInterviewType() == InterviewType.HR ? "HR" : "Technical";
+
+            String candidatePrompt = """
+                    You are Maya, an intelligent, professional, and friendly virtual interviewer conducting a realistic %s interview for a %s position.
+                    The candidate is asking you a question at the end of the interview.
+
+                    Candidate's question: "%s"
+
+                    INSTRUCTIONS FOR MAYA:
+                    1. Answer the candidate's question directly, warmly, and concisely in 2 to 4 sentences.
+                    2. Speak authentically as a knowledgeable interviewer representing a modern professional company.
+                    3. If the candidate asks about the tech stack, team culture, onboarding, or day-to-day responsibilities, provide a realistic, positive, and industry-standard answer suitable for a %s role.
+                    4. Do NOT invent confidential company policies, guaranteed salaries, or job offers.
+                    5. If the candidate asks about salary, perks, or definitive hiring decisions, politely explain that the HR recruitment team will discuss those details in the upcoming steps.
+                    6. End your response with this exact question: "Would you like to ask anything else?"
+                    7. Return ONLY valid JSON in this exact structure:
+                    {
+                      "evaluation": "CORRECT",
+                      "feedback": "",
+                      "nextQuestion": "<Your warm, concise 2-4 sentence answer here> Would you like to ask anything else?",
+                      "communicationScore": 95,
+                      "technicalKnowledgeScore": null,
+                      "projectKnowledgeScore": null,
+                      "responseQualityScore": 95
+                    }
+                    """.formatted(interviewTypeStr, role, request.getUserAnswer().trim(), role);
+
+            try {
+                AnswerResponse answerResponse = parseResponse(geminiService.generateInterviewResponse(candidatePrompt));
+                if (answerResponse != null && answerResponse.getNextQuestion() != null && !answerResponse.getNextQuestion().isBlank()) {
+                    answerResponse.setNextStage("CANDIDATE_QUESTIONS");
+                    answerResponse.setEvaluation("CORRECT");
+                    answerResponse.setFeedback("");
+                    if (answerResponse.getCommunicationScore() == null) answerResponse.setCommunicationScore(95);
+                    if (answerResponse.getResponseQualityScore() == null) answerResponse.setResponseQualityScore(95);
+                    return answerResponse;
+                }
+            } catch (Exception e) {
+                // Fallback gracefully on Gemini failure or timeout without losing interview state
+            }
+
+            AnswerResponse fallback = new AnswerResponse();
+            fallback.setEvaluation("CORRECT");
+            fallback.setFeedback("");
+            fallback.setNextQuestion("That is a great question. In our team, we emphasize continuous learning, strong collaboration, and building high-quality, impactful software. Would you like to ask anything else?");
+            fallback.setNextStage("CANDIDATE_QUESTIONS");
+            fallback.setCommunicationScore(90);
+            fallback.setResponseQualityScore(90);
+            return fallback;
+        }
+
         String resumeText = interview.getResumeText();
 
         if (resumeText == null) {
@@ -106,9 +246,9 @@ public class InterviewQuestionService {
 
         }
 
-        if (resumeText.length() > 12000) {
+        if (resumeText.length() > 3000) {
 
-            resumeText = resumeText.substring(0, 12000);
+            resumeText = resumeText.substring(0, 3000);
 
         }
 
@@ -199,7 +339,7 @@ public class InterviewQuestionService {
 
             );
 
-        } else if ("CANDIDATE_QUESTIONS".equals(nextStage)) {
+        } else if ("CANDIDATE_QUESTIONS".equals(nextStage) && !"CANDIDATE_QUESTIONS".equals(stage)) {
 
             answerResponse.setNextQuestion("Do you have any questions for me?");
 
@@ -207,38 +347,30 @@ public class InterviewQuestionService {
 
 
 
-        if ("GREETING".equals(stage)
-
+        if (Boolean.TRUE.equals(answerResponse.isConversationalRemark())) {
+            answerResponse.setEvaluation("UNRELATED");
+            answerResponse.setNextStage(stage);
+            answerResponse.setNextQuestion(request.getCurrentQuestion());
+        } else if ("GREETING".equals(stage)
                 || "WELLBEING".equals(stage)
-
                 || "START_PERMISSION".equals(stage)
-
                 || "INTRODUCTION".equals(stage)) {
 
             answerResponse.setEvaluation("CORRECT");
-
             answerResponse.setFeedback("");
-
         }
 
 
-
-        answerResponse = ensureUniqueQuestion(
-
-                answerResponse,
-
-                prompt,
-
-                interview,
-
-                previousQuestions,
-
-                previousAnswers,
-
-                resumeText
-
-        );
-
+        if (!interviewFlowService.isFixedQuestionStage(nextStage)) {
+            answerResponse = ensureUniqueQuestion(
+                    answerResponse,
+                    prompt,
+                    interview,
+                    previousQuestions,
+                    previousAnswers,
+                    resumeText
+            );
+        }
 
 
         answerResponse.setNextStage(nextStage);
@@ -325,7 +457,7 @@ public class InterviewQuestionService {
 
                     + "Technical focus: " + interview.getTechnicalFocus() + "\n\n"
 
-                    + "Candidate resume context:\n" + limitResume(interview.getResumeText(), 12000) + "\n\n"
+                    + "Candidate resume context:\n" + limitResume(interview.getResumeText(), 3000) + "\n\n"
 
                     + "The previous interviewer question was:\n" + currentQuestion + "\n\n"
 
@@ -424,20 +556,21 @@ public class InterviewQuestionService {
                     + "Continue the interview naturally from the CURRENT stage.\n\n"
 
                     + "HR STAGE RULES:\n"
-
                     + "- GREETING: the greeting has already happened. Move to WELLBEING.\n"
-
-                    + "- WELLBEING: acknowledge the candidate briefly and move to INTRODUCTION.\n"
-
-                    + "- INTRODUCTION: move to BACKGROUND.\n"
-
-                    + "- BACKGROUND: move to HR_BEHAVIOURAL.\n"
-
-                    + "- HR_BEHAVIOURAL: ask relevant behavioural or resume-based follow-ups.\n"
-
+                    + "- WELLBEING: ask how the candidate is doing today: How are you doing today?\n"
+                    + "- START_PERMISSION: ask: Great. Shall we begin?\n"
+                    + "- INTRODUCTION: ask the candidate to tell about themselves / introduce themselves.\n"
+                    + "- BACKGROUND: ask about their educational background and what led them to this field.\n"
+                    + "- STRENGTHS: ask about their primary professional strengths.\n"
+                    + "- WEAKNESS: ask about an area of improvement or a weakness they are actively developing.\n"
+                    + "- ROLE_MOTIVATION: ask why they want this specific role.\n"
+                    + "- WHY_HIRE: ask why the company should hire them and what unique value they bring.\n"
+                    + "- TEAMWORK: ask about a project or teamwork experience.\n"
+                    + "- CHALLENGES: ask about a difficult challenge or conflict they successfully handled.\n"
+                    + "- CAREER_GOALS: ask about their professional career goals over the next few years.\n"
+                    + "- EXPECTATIONS: ask about their workplace expectations or availability.\n"
                     + "- CANDIDATE_QUESTIONS: ask whether the candidate has any questions for the interviewer.\n"
-
-                    + "- CLOSING: politely close the interview.\n\n"
+                    + "- CLOSING: politely close the interview and thank the candidate.\n\n"
 
                     + "Conversation rules:\n"
 
@@ -542,23 +675,14 @@ public class InterviewQuestionService {
                 + "10. CLOSING: thank the candidate and say the team will update them regarding next steps.\n\n"
 
                 + "PROJECT RULES:\n"
-
                 + "- Ask exactly 3 project questions.\n"
-
                 + "- The PROJECT stages must discuss an actual PROJECT from the candidate's resume, not an internship, job, training, certification, or work experience.\n"
-
-                + "- If the resume contains a project named TechFolyo or TechFoliyo, use that project for PROJECT_1, PROJECT_2, and PROJECT_3.\n"
-
-                + "- PROJECT_1 must ask only for a general explanation of that same project.\n"
-
-                + "- PROJECT_2 must ask only about the candidate's specific contribution to that same project.\n"
-
-                + "- PROJECT_3 must ask only about the most challenging part of that same project and how the candidate solved it.\n"
-
+                + "- Identify the most prominent software project from the resume (e.g. TechFolyo if present, or any primary project listed) and maintain discussion on that same project across PROJECT_1, PROJECT_2, and PROJECT_3.\n"
+                + "- PROJECT_1 must ask only for a general explanation, purpose, and architecture of that project.\n"
+                + "- PROJECT_2 must ask only about the candidate's specific contributions, implementation details, and technical choices on that same project.\n"
+                + "- PROJECT_3 must ask only about the most challenging technical part or problem encountered in that same project and how the candidate solved it.\n"
                 + "- Do not use an internship as the project discussion when an actual project is present in the resume.\n"
-
                 + "- Use only actual project details from the resume.\n"
-
                 + "- Never invent project technologies or details.\n\n"
 
                 + "ONE-QUESTION ENFORCEMENT:\n"
@@ -870,19 +994,31 @@ public class InterviewQuestionService {
 
 
     private boolean areQuestionsNearlyIdentical(String first, String second) {
-
         if (first == null || second == null) return false;
 
         String a = normalizeQuestionForComparison(first);
-
         String b = normalizeQuestionForComparison(second);
 
         if (a.isEmpty() || b.isEmpty()) return false;
-
         if (a.equals(b)) return true;
 
-        return a.contains(b) || b.contains(a);
+        // Compare word tokens for significant overlap rather than arbitrary substring containment
+        java.util.Set<String> wordsA = new java.util.HashSet<>(java.util.Arrays.asList(a.split("\\s+")));
+        java.util.Set<String> wordsB = new java.util.HashSet<>(java.util.Arrays.asList(b.split("\\s+")));
 
+        // Remove common stopwords for comparison
+        java.util.Set<String> stopWords = java.util.Set.of("what", "how", "why", "the", "a", "an", "is", "are", "do", "does", "can", "could", "you", "explain", "in", "of", "to", "for", "with", "and", "or");
+        wordsA.removeAll(stopWords);
+        wordsB.removeAll(stopWords);
+
+        if (wordsA.isEmpty() || wordsB.isEmpty()) return false;
+
+        java.util.Set<String> intersection = new java.util.HashSet<>(wordsA);
+        intersection.retainAll(wordsB);
+
+        int minSize = Math.min(wordsA.size(), wordsB.size());
+        // Treat as duplicate only if 85%+ of meaningful words match
+        return minSize >= 4 && ((double) intersection.size() / minSize) >= 0.85;
     }
 
 

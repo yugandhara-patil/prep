@@ -1,6 +1,21 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  Calculator,
+  BrainCircuit,
+  BookOpen,
+  Terminal,
+  FileText,
+  Clock,
+  Target,
+  ArrowRight,
+  ArrowLeft,
+  Sparkles,
+  CheckCircle2,
+  ChevronRight
+} from "lucide-react";
 import Navbar from "./Navbar";
+import Footer from "./Footer";
 
 function PracticeQuestions() {
   const navigate = useNavigate();
@@ -11,194 +26,210 @@ function PracticeQuestions() {
   const practiceSections = [
     {
       title: "Quantitative Aptitude",
-      icon: "🧮",
+      icon: Calculator,
+      badge: "Arithmetic & Math",
       description:
-        "Test your numerical ability with percentages, ratios, averages, probability, time and work, and more.",
+        "Test your numerical ability with percentages, ratios, averages, probability, time & work, equations, and algebra.",
     },
     {
       title: "Logical Reasoning",
-      icon: "🧠",
+      icon: BrainCircuit,
+      badge: "Logic & Deduction",
       description:
-        "Practice mixed reasoning questions including series, puzzles, coding-decoding, syllogisms, and more.",
+        "Practice mixed analytical reasoning questions including number series, puzzles, coding-decoding, syllogisms, and patterns.",
     },
     {
       title: "Verbal Ability",
-      icon: "📖",
+      icon: BookOpen,
+      badge: "English & Comprehension",
       description:
-        "Improve your language skills through grammar, vocabulary, comprehension, sentence correction, and more.",
+        "Strengthen your linguistic proficiency through grammar rules, vocabulary, reading comprehension, idioms, and sentence correction.",
     },
     {
       title: "Technical Aptitude",
-      icon: "💻",
+      icon: Terminal,
+      badge: "Core CS & Engineering",
       description:
-        "Test your technical knowledge with questions from programming, OOP, DBMS, SQL, OS, DSA, and more.",
+        "Assess your foundational technical aptitude in OOP concepts, DBMS & SQL, operating systems, data structures, and algorithms.",
     },
   ];
 
   const difficulties = [
     {
       title: "Easy",
-      description: "Basic questions to build your fundamentals.",
+      tag: "Fundamental",
+      desc: "Foundational conceptual questions designed to build core intuition and accuracy.",
+      color: "emerald",
     },
     {
       title: "Medium",
-      description: "Standard placement-level questions.",
+      tag: "Standard Placement",
+      desc: "Standard industry placement-level questions with moderate complexity and multi-step reasoning.",
+      color: "indigo",
     },
     {
       title: "Hard",
-      description: "Challenging questions that require deeper reasoning.",
+      tag: "Advanced Analytical",
+      desc: "Challenging assessment questions requiring deep deduction, edge-case analysis, and rapid problem-solving.",
+      color: "rose",
     },
   ];
 
   // =========================
   // DIFFICULTY SCREEN
   // =========================
-
   if (selectedSection) {
     return (
-      <div className="min-h-screen bg-[#F8F7FC]">
+      <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
         <Navbar />
 
-        <main className="mx-auto max-w-7xl px-5 pb-16 pt-8 md:px-8 lg:px-10">
+        <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
 
-          {/* HEADER */}
-          <section className="rounded-[28px] border border-purple-100 bg-gradient-to-br from-white via-[#FCFAFF] to-[#EEE8FF] px-7 py-10 shadow-[0_16px_50px_rgba(109,77,232,0.08)] md:px-11">
-
+          {/* HEADER BANNER */}
+          <section className="relative overflow-hidden rounded-3xl bg-white border border-slate-200 p-6 sm:p-10 shadow-xs">
             <button
               type="button"
               onClick={() => {
                 setSelectedSection(null);
                 setSelectedDifficulty(null);
               }}
-              className="text-sm font-semibold text-[#6D4DE8] transition hover:text-[#5E3FD1]"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition"
             >
-              ← Back to Sections
+              <ArrowLeft className="h-4 w-4" /> Back to All Topics
             </button>
 
-            <p className="mt-8 text-sm font-semibold uppercase tracking-[0.14em] text-[#8A78C8]">
-              Practice Questions
-            </p>
-
-            <h1 className="mt-2 text-3xl font-extrabold text-slate-950 md:text-4xl">
-              {selectedSection}
-            </h1>
-
-            <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
-              Choose your difficulty level to begin a 30-question practice
-              test.
-            </p>
-
+            <div className="mt-4">
+              <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">
+                Step 2 of 2: Select Depth
+              </span>
+              <h1 className="mt-1 text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                {selectedSection}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
+                Choose your difficulty level to begin a customized 30-question timed practice simulation.
+              </p>
+            </div>
           </section>
 
-          {/* DIFFICULTY */}
-          <section className="mt-10">
-
-            <div className="mb-5">
-              <h2 className="text-2xl font-bold text-slate-950">
-                Choose Difficulty
+          {/* DIFFICULTY SELECTION CARDS */}
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+                Select Difficulty Level
               </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Your test will contain 30 mixed questions.
+              <p className="text-xs text-slate-500">
+                Tailor question complexity according to your current preparation stage
               </p>
             </div>
 
-            <div className="grid gap-5 md:grid-cols-3">
+            <div className="grid gap-6 md:grid-cols-3">
+              {difficulties.map((difficulty) => {
+                const isSelected = selectedDifficulty === difficulty.title;
 
-              {difficulties.map((difficulty) => (
-                <button
-                  key={difficulty.title}
-                  type="button"
-                  onClick={() =>
-                    setSelectedDifficulty(difficulty.title)
-                  }
-                  className={`rounded-[24px] border bg-white p-7 text-left transition duration-200 hover:-translate-y-1 hover:shadow-lg ${
-                    selectedDifficulty === difficulty.title
-                      ? "border-[#6D4DE8] shadow-md ring-2 ring-[#6D4DE8]/20"
-                      : "border-slate-200 hover:border-[#B9A8F2]"
-                  }`}
-                >
-
-                  <div
-                    className={`flex h-12 w-12 items-center justify-center rounded-xl text-lg font-bold ${
-                      difficulty.title === "Easy"
-                        ? "bg-green-50 text-green-600"
-                        : difficulty.title === "Medium"
-                        ? "bg-yellow-50 text-yellow-600"
-                        : "bg-red-50 text-red-600"
+                return (
+                  <button
+                    key={difficulty.title}
+                    type="button"
+                    onClick={() => setSelectedDifficulty(difficulty.title)}
+                    className={`rounded-3xl border p-6 text-left transition-all duration-200 flex flex-col justify-between hover:-translate-y-1 ${
+                      isSelected
+                        ? "border-indigo-600 bg-indigo-50/40 shadow-md ring-2 ring-indigo-600/20"
+                        : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
                     }`}
                   >
-                    {difficulty.title === "Easy"
-                      ? "E"
-                      : difficulty.title === "Medium"
-                      ? "M"
-                      : "H"}
-                  </div>
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                          difficulty.title === "Easy"
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : difficulty.title === "Medium"
+                            ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                            : "bg-rose-50 text-rose-700 border border-rose-200"
+                        }`}>
+                          {difficulty.tag}
+                        </span>
 
-                  <h3 className="mt-5 text-xl font-bold text-slate-950">
-                    {difficulty.title}
-                  </h3>
+                        <span className={`h-5 w-5 rounded-full flex items-center justify-center border text-xs ${
+                          isSelected
+                            ? "border-indigo-600 bg-indigo-600 text-white font-bold"
+                            : "border-slate-300 text-transparent"
+                        }`}>
+                          ✓
+                        </span>
+                      </div>
 
-                  <p className="mt-2 text-sm leading-6 text-slate-500">
-                    {difficulty.description}
-                  </p>
+                      <h3 className="mt-4 text-xl font-bold text-slate-900">
+                        {difficulty.title}
+                      </h3>
 
-                  <p className="mt-5 text-sm font-semibold text-[#6D4DE8]">
-                    {selectedDifficulty === difficulty.title
-                      ? "Selected ✓"
-                      : "Select Difficulty →"}
-                  </p>
+                      <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                        {difficulty.desc}
+                      </p>
+                    </div>
 
-                </button>
-              ))}
-
+                    <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-semibold">
+                      <span className={isSelected ? "text-indigo-600" : "text-slate-400"}>
+                        {isSelected ? "Selected Tier" : "Click to select"}
+                      </span>
+                      <ChevronRight className={`w-4 h-4 ${isSelected ? "text-indigo-600" : "text-slate-400"}`} />
+                    </div>
+                  </button>
+                );
+              })}
             </div>
 
-            {/* TEST INFORMATION */}
+            {/* TEST CONFIGURATION BAR & START BUTTON */}
             {selectedDifficulty && (
-              <div className="mt-8 rounded-[24px] border border-purple-100 bg-white p-7 shadow-sm">
-
+              <div className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs animate-fadeIn">
                 <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-
                   <div>
-                    <p className="text-sm font-medium text-slate-500">
-                      Test Configuration
-                    </p>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      Configured Simulation
+                    </span>
 
-                    <h3 className="mt-2 text-xl font-bold text-slate-950">
-                      {selectedSection} · {selectedDifficulty}
+                    <h3 className="mt-1 text-xl font-bold text-slate-900">
+                      {selectedSection} • {selectedDifficulty} Tier
                     </h3>
 
-                    <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-500">
-                      <span>📝 30 Questions</span>
-                      <span>⏱️ 30 Minutes</span>
-                      <span>🎯 Mixed Questions</span>
+                    <div className="mt-3 flex flex-wrap gap-4 text-xs font-medium text-slate-600">
+                      <span className="inline-flex items-center gap-1.5">
+                        <FileText className="h-4 w-4 text-indigo-600" />
+                        30 Questions
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <Clock className="h-4 w-4 text-indigo-600" />
+                        30 Minutes (1 min / question)
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <Target className="h-4 w-4 text-indigo-600" />
+                        Mixed Multiple Choice
+                      </span>
                     </div>
                   </div>
 
                   <button
-  type="button"
-  onClick={() =>
-    navigate("/practice-test", {
-      state: {
-        section: selectedSection,
-        difficulty: selectedDifficulty,
-      },
-    })
-  }
-  className="rounded-xl bg-[#6D4DE8] px-7 py-3.5 font-semibold text-white shadow-md shadow-purple-200 transition hover:bg-[#5E3FD1]"
->
-  Start Test
-</button>
-
+                    type="button"
+                    onClick={() =>
+                      navigate("/practice-test", {
+                        state: {
+                          section: selectedSection,
+                          difficulty: selectedDifficulty,
+                        },
+                      })
+                    }
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-7 py-3.5 font-bold text-sm text-white shadow-md hover:bg-indigo-500 transition-all hover:shadow-indigo-500/25 active:scale-[0.99]"
+                  >
+                    Start Practice Test
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
                 </div>
-
               </div>
             )}
-
           </section>
 
         </main>
+
+        <Footer />
       </div>
     );
   }
@@ -206,87 +237,89 @@ function PracticeQuestions() {
   // =========================
   // SECTION SELECTION SCREEN
   // =========================
-
   return (
-    <div className="min-h-screen bg-[#F8F7FC]">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
       <Navbar />
 
-      <main className="mx-auto max-w-7xl px-5 pb-16 pt-8 md:px-8 lg:px-10">
+      <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-10">
 
         {/* HEADER */}
-        <section className="rounded-[28px] border border-purple-100 bg-gradient-to-br from-white via-[#FCFAFF] to-[#EEE8FF] px-7 py-10 shadow-[0_16px_50px_rgba(109,77,232,0.08)] md:px-11">
+        <section className="relative overflow-hidden rounded-3xl bg-white border border-slate-200 p-6 sm:p-10 shadow-xs">
+          <div className="max-w-3xl space-y-3">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-indigo-600">
+              <Sparkles className="w-3.5 h-3.5" />
+              Aptitude & Technical Drills
+            </span>
 
-          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#8A78C8]">
-            Aptitude Preparation
-          </p>
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+              Practice Questions
+            </h1>
 
-          <h1 className="mt-2 text-3xl font-extrabold text-slate-950 md:text-4xl">
-            Practice Questions
-          </h1>
-
-          <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
-            Sharpen your aptitude and placement skills with timed practice
-            tests across quantitative, logical, verbal, and technical areas.
-          </p>
-
+            <p className="text-sm sm:text-base leading-relaxed text-slate-600">
+              Sharpen your placement problem-solving skills with timed practice assessments across quantitative, logical, verbal, and technical aptitude domains.
+            </p>
+          </div>
         </section>
 
-        {/* SECTION SELECTION */}
-        <section className="mt-10">
-
-          <div className="mb-5">
-            <h2 className="text-2xl font-bold text-slate-950">
-              Choose a Section
+        {/* SECTION SELECTION CARDS */}
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+              Choose a Subject Area
             </h2>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Each test contains 30 mixed questions based on your selected
-              difficulty.
+            <p className="text-xs text-slate-500">
+              Each test delivers 30 timed multiple choice questions calibrated to your selected difficulty
             </p>
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid gap-6 sm:grid-cols-2">
+            {practiceSections.map((section) => {
+              const Icon = section.icon;
+              return (
+                <button
+                  key={section.title}
+                  type="button"
+                  onClick={() => setSelectedSection(section.title)}
+                  className="group rounded-3xl border border-slate-200 bg-white p-7 text-left transition-all duration-200 hover:-translate-y-1 hover:border-indigo-300 hover:shadow-md flex flex-col justify-between"
+                >
+                  <div className="flex items-start gap-5">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                      <Icon className="h-7 w-7" />
+                    </div>
 
-            {practiceSections.map((section) => (
-              <button
-                key={section.title}
-                type="button"
-                onClick={() => setSelectedSection(section.title)}
-                className="group rounded-[24px] border border-slate-200 bg-white p-7 text-left transition duration-200 hover:-translate-y-1 hover:border-[#B9A8F2] hover:shadow-lg"
-              >
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                          {section.title}
+                        </h3>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                          {section.badge}
+                        </span>
+                      </div>
 
-                <div className="flex items-start gap-5">
-
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#F1EDFF] text-3xl">
-                    {section.icon}
+                      <p className="text-xs leading-relaxed text-slate-500">
+                        {section.description}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="flex-1">
-
-                    <h3 className="text-xl font-bold text-slate-950">
-                      {section.title}
-                    </h3>
-
-                    <p className="mt-2 text-sm leading-6 text-slate-500">
-                      {section.description}
-                    </p>
-
-                    <p className="mt-5 text-sm font-semibold text-[#6D4DE8]">
-                      Select Section →
-                    </p>
-
+                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-400 group-hover:text-slate-600 transition">
+                      30 Questions • Timed
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 group-hover:gap-2 transition-all">
+                      Configure & Start <ArrowRight className="h-4 w-4" />
+                    </span>
                   </div>
-
-                </div>
-
-              </button>
-            ))}
-
+                </button>
+              );
+            })}
           </div>
-
         </section>
 
       </main>
+
+      <Footer />
     </div>
   );
 }

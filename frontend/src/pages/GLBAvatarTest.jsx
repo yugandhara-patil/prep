@@ -118,118 +118,75 @@ function GLBAvatarTest({
   // ------------------------------------------
 
   useEffect(() => {
-    const container =
-      mountRef.current;
+    let isMounted = true;
+    const container = mountRef.current;
 
     if (!container) return;
+
+    // Remove any stale canvas elements from fast-refresh / StrictMode
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
 
     // ========================================
     // SCENE
     // ========================================
 
-    const scene =
-      new THREE.Scene();
-
-    scene.background =
-      new THREE.Color(
-        0xf2f7fb
-      );
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf2f7fb);
 
     // ========================================
     // CAMERA
     // ========================================
 
-    const camera =
-      new THREE.PerspectiveCamera(
-        35,
-        container.clientWidth /
-          container.clientHeight,
-        0.1,
-        100
-      );
+    const camera = new THREE.PerspectiveCamera(
+      35,
+      container.clientWidth / container.clientHeight,
+      0.1,
+      100
+    );
 
     // ========================================
     // RENDERER
     // ========================================
 
-    const renderer =
-      new THREE.WebGLRenderer({
-        antialias: true,
-        alpha: true,
-      });
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+    });
 
-    renderer.setPixelRatio(
-      Math.min(
-        window.devicePixelRatio,
-        2
-      )
-    );
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(container.clientWidth, container.clientHeight);
 
-    renderer.setSize(
-      container.clientWidth,
-      container.clientHeight
-    );
-
-    container.appendChild(
-      renderer.domElement
-    );
+    container.appendChild(renderer.domElement);
 
     // ========================================
     // LIGHTING
     // ========================================
 
-    const ambientLight =
-      new THREE.AmbientLight(
-        0xffffff,
-        2.5
-      );
+    const ambientLight = new THREE.AmbientLight(0xffffff, 2.5);
+    scene.add(ambientLight);
 
-    scene.add(
-      ambientLight
-    );
-
-    const keyLight =
-      new THREE.DirectionalLight(
-        0xffffff,
-        2
-      );
-
-    keyLight.position.set(
-      2,
-      3,
-      5
-    );
-
-    scene.add(
-      keyLight
-    );
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2);
+    keyLight.position.set(2, 3, 5);
+    scene.add(keyLight);
 
     // ========================================
     // LOAD GLB
     // ========================================
 
-    const loader =
-      new GLTFLoader();
+    const loader = new GLTFLoader();
 
     loader.load(
       avatarUrl,
-
       (gltf) => {
-        console.log(
-          "✅ GLB loaded"
-        );
+        if (!isMounted) return;
 
-        console.log(
-          "🎬 Animations:",
-          gltf.animations
-        );
+        console.log("✅ GLB loaded");
+        console.log("🎬 Animations:", gltf.animations);
 
-        const avatar =
-          gltf.scene;
-
-        scene.add(
-          avatar
-        );
+        const avatar = gltf.scene;
+        scene.add(avatar);
 
         // ====================================
         // RESET TRANSFORM
@@ -531,8 +488,10 @@ function GLBAvatarTest({
     // ANIMATION LOOP
     // ========================================
 
-    const clock =
-      new THREE.Clock();
+    const timer =
+      typeof THREE.Timer === "function"
+        ? new THREE.Timer()
+        : new THREE.Clock();
 
     let animationFrame;
 
@@ -542,8 +501,12 @@ function GLBAvatarTest({
           animate
         );
 
+      if (typeof timer.update === "function") {
+        timer.update();
+      }
+
       const delta =
-        clock.getDelta();
+        timer.getDelta();
 
       // --------------------------------------
       // THREE.JS ANIMATION MIXER
@@ -755,6 +718,8 @@ function GLBAvatarTest({
     // ========================================
 
     return () => {
+      isMounted = false;
+
       cancelAnimationFrame(
         animationFrame
       );

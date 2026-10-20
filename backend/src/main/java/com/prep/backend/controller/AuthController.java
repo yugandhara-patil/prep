@@ -46,4 +46,28 @@ public class AuthController {
 
         return ResponseEntity.ok(response);
     }
+
+    @PostMapping("/google")
+    public ResponseEntity<LoginResponse> googleLogin(
+            @Valid @RequestBody com.prep.backend.dto.GoogleAuthRequest request
+    ) {
+        LoginResponse response = userService.loginWithGoogle(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<com.prep.backend.dto.MessageResponse> forgotPassword(
+            @Valid @RequestBody com.prep.backend.dto.ForgotPasswordRequest request
+    ) {
+        com.prep.backend.dto.MessageResponse response = userService.forgotPassword(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<com.prep.backend.dto.MessageResponse> resetPassword(
+            @Valid @RequestBody com.prep.backend.dto.ResetPasswordRequest request
+    ) {
+        com.prep.backend.dto.MessageResponse response = userService.resetPassword(request);
+        return ResponseEntity.ok(response);
+    }
 }

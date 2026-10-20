@@ -43,11 +43,27 @@ public class OverallPerformanceService {
                         interview.getStatus() == InterviewStatus.COMPLETED)
                 .toList();
 
+        List<Map<String, Object>> unfinishedInterviews = new ArrayList<>();
+        for (Interview interview : allInterviews) {
+            if (interview.getStatus() != InterviewStatus.COMPLETED) {
+                Map<String, Object> unfinishedData = new HashMap<>();
+                unfinishedData.put("interviewId", interview.getId());
+                unfinishedData.put("interviewType", interview.getInterviewType() != null ? interview.getInterviewType().name() : "TECHNICAL");
+                unfinishedData.put("targetRole", interview.getTargetRole());
+                unfinishedData.put("difficulty", interview.getDifficulty() != null ? interview.getDifficulty().name() : "MEDIUM");
+                unfinishedData.put("technicalFocus", interview.getTechnicalFocus());
+                unfinishedData.put("status", interview.getStatus().name());
+                unfinishedData.put("startedAt", interview.getStartedAt());
+                int answeredCount = interviewAnswerRepository.findByInterviewOrderByIdAsc(interview).size();
+                unfinishedData.put("questionsAnswered", answeredCount);
+                unfinishedInterviews.add(unfinishedData);
+            }
+        }
 
         int totalInterviews = completedInterviews.size();
 
         if (totalInterviews == 0) {
-            return buildEmptyPerformanceResponse();
+            return buildEmptyPerformanceResponse(unfinishedInterviews);
         }
 
 
@@ -67,6 +83,14 @@ public class OverallPerformanceService {
 
         long totalPracticeSeconds = 0;
 
+        int totalAnswersEvaluated = 0;
+        int totalIncorrectAnswers = 0;
+        int totalPartialAnswers = 0;
+        int techAnswersEvaluated = 0;
+        int techGapsCount = 0;
+        int hrAnswersEvaluated = 0;
+        int hrGapsCount = 0;
+
         List<Map<String, Object>> recentInterviews = new ArrayList<>();
 
         Map<String, List<Double>> typeScores = new HashMap<>();
@@ -74,6 +98,8 @@ public class OverallPerformanceService {
 
 
         for (Interview interview : completedInterviews) {
+
+            boolean isHr = interview.getInterviewType() == InterviewType.HR;
 
             List<InterviewAnswer> answers =
                     interviewAnswerRepository
@@ -91,6 +117,20 @@ public class OverallPerformanceService {
 
 
             for (InterviewAnswer answer : answers) {
+
+                totalAnswersEvaluated++;
+                String eval = answer.getEvaluation() != null ? answer.getEvaluation().toUpperCase() : "";
+                boolean isGap = "INCORRECT".equals(eval) || "PARTIALLY_CORRECT".equals(eval);
+                if ("INCORRECT".equals(eval)) totalIncorrectAnswers++;
+                if ("PARTIALLY_CORRECT".equals(eval)) totalPartialAnswers++;
+
+                if (isHr) {
+                    hrAnswersEvaluated++;
+                    if (isGap) hrGapsCount++;
+                } else {
+                    techAnswersEvaluated++;
+                    if (isGap) techGapsCount++;
+                }
 
                 if (answer.getCommunicationScore() != null) {
                     communicationTotal += answer.getCommunicationScore();
@@ -207,6 +247,14 @@ public class OverallPerformanceService {
                     .add(interviewScore);
 
 
+            long durationSeconds = 0;
+            if (interview.getStartedAt() != null && interview.getCompletedAt() != null) {
+                try {
+                    durationSeconds = Duration.between(interview.getStartedAt(), interview.getCompletedAt()).getSeconds();
+                } catch (Exception ignored) {
+                }
+            }
+
             Map<String, Object> interviewData = new HashMap<>();
 
             interviewData.put("interviewId", interview.getId());
@@ -216,6 +264,7 @@ public class OverallPerformanceService {
             interviewData.put("score", round(interviewScore));
             interviewData.put("startedAt", interview.getStartedAt());
             interviewData.put("completedAt", interview.getCompletedAt());
+            interviewData.put("durationSeconds", Math.max(0, durationSeconds));
 
             recentInterviews.add(interviewData);
         }
@@ -286,6 +335,11 @@ public class OverallPerformanceService {
                         .toList()
         );
 
+        response.put(
+                "unfinishedInterviews",
+                unfinishedInterviews
+        );
+
 
         response.put(
                 "readinessLevel",
@@ -296,45 +350,32 @@ public class OverallPerformanceService {
         response.put(
                 "strengths",
                 buildStrengths(
-                        average(
-                                totalCommunicationScore,
-                                communicationCount
-                        ),
-                        average(
-                                totalTechnicalScore,
-                                technicalCount
-                        ),
-                        average(
-                                totalProjectScore,
-                                projectCount
-                        ),
-                        average(
-                                totalResponseQualityScore,
-                                responseQualityCount
-                        )
+                        average(totalCommunicationScore, communicationCount),
+                        communicationCount,
+                        average(totalTechnicalScore, technicalCount),
+                        technicalCount,
+                        average(totalProjectScore, projectCount),
+                        projectCount,
+                        average(totalResponseQualityScore, responseQualityCount),
+                        responseQualityCount,
+                        totalInterviews
                 )
         );
-
 
         response.put(
                 "areasToImprove",
                 buildAreasToImprove(
-                        average(
-                                totalCommunicationScore,
-                                communicationCount
-                        ),
-                        average(
-                                totalTechnicalScore,
-                                technicalCount
-                        ),
-                        average(
-                                totalProjectScore,
-                                projectCount
-                        ),
-                        average(
-                                totalResponseQualityScore,
-                                responseQualityCount
-                        )
+                        average(totalCommunicationScore, communicationCount),
+                        average(totalTechnicalScore, technicalCount),
+                        average(totalProjectScore, projectCount),
+                        average(totalResponseQualityScore, responseQualityCount),
+                        averageScore,
+                        totalInterviews,
+                        totalAnswersEvaluated,
+                        techAnswersEvaluated,
+                        techGapsCount,
+                        hrAnswersEvaluated,
+                        hrGapsCount
                 )
         );
 
@@ -400,63 +441,108 @@ public class OverallPerformanceService {
 
     private List<String> buildStrengths(
             double communication,
+            int commCount,
             double technical,
+            int techCount,
             double project,
-            double responseQuality
+            int projCount,
+            double responseQuality,
+            int qualCount,
+            int totalInterviews
     ) {
-
         List<String> strengths = new ArrayList<>();
 
-        if (communication >= 70) {
-            strengths.add("Strong communication");
+        if (communication >= 70 && commCount > 0) {
+            strengths.add("Strong Communication: Demonstrated clear delivery and professional articulation across "
+                    + commCount + " evaluated response(s).");
         }
 
-        if (technical >= 70) {
-            strengths.add("Good technical knowledge");
+        if (technical >= 70 && techCount > 0) {
+            strengths.add("Technical Competence: Solid foundational understanding and concept accuracy across "
+                    + techCount + " technical question(s).");
         }
 
-        if (project >= 70) {
-            strengths.add("Good project understanding");
+        if (project >= 70 && projCount > 0) {
+            strengths.add("Project Knowledge: Clear explanation of project architecture, technologies used, and real-world decisions.");
         }
 
-        if (responseQuality >= 70) {
-            strengths.add("Strong response quality");
+        if (responseQuality >= 70 && qualCount > 0) {
+            strengths.add("High Response Quality: Answers directly address questions with strong relevance and structure.");
+        }
+
+        if (strengths.isEmpty() && totalInterviews > 0) {
+            strengths.add("Active Interview Practice: Demonstrating commitment by completing full mock sessions to build real-world interview fluency.");
         }
 
         return strengths;
     }
 
-
     private List<String> buildAreasToImprove(
             double communication,
             double technical,
             double project,
-            double responseQuality
+            double responseQuality,
+            double overallAverage,
+            int totalInterviews,
+            int totalAnswers,
+            int techAnswers,
+            int techGaps,
+            int hrAnswers,
+            int hrGaps
     ) {
-
         List<String> areas = new ArrayList<>();
 
-        if (communication > 0 && communication < 70) {
-            areas.add("Improve communication clarity and structure");
+        if (totalInterviews == 0) {
+            return areas;
         }
 
-        if (technical > 0 && technical < 70) {
-            areas.add("Strengthen technical knowledge");
+        // 1. Technical Performance
+        if (techAnswers > 0) {
+            if (techGaps > 0) {
+                areas.add("Technical Depth & Edge Cases: " + techGaps + " of " + techAnswers
+                        + " technical answer(s) had inaccuracies or missing coverage (recorded average: "
+                        + Math.round(technical) + "%). Review core framework fundamentals, data structures, and concrete implementation details.");
+            } else if (technical > 0 && technical < 80) {
+                areas.add("Technical Explanation Breadth: Technical average is " + Math.round(technical)
+                        + "%. Deepen responses by explaining underlying system mechanics, concurrency, and performance trade-offs.");
+            }
         }
 
-        if (project > 0 && project < 70) {
-            areas.add("Improve project understanding and explanation");
+        // 2. HR & Behavioral Performance
+        if (hrAnswers > 0) {
+            if (hrGaps > 0) {
+                areas.add("Behavioral Structure (STAR Method): " + hrGaps + " of " + hrAnswers
+                        + " HR response(s) needed clearer structure. Frame behavioral examples using Situation, Task, Action, and measurable Result.");
+            } else if (communication > 0 && communication < 80) {
+                areas.add("Concise Communication Delivery: Recorded communication average is " + Math.round(communication)
+                        + "%. Lead with concise direct conclusions before providing supporting background details.");
+            }
         }
 
-        if (responseQuality > 0 && responseQuality < 70) {
-            areas.add("Improve answer relevance, completeness, and reasoning");
+        // 3. Project Depth
+        if (project > 0 && project < 80) {
+            areas.add("Project Contribution & Architecture: Project knowledge average is " + Math.round(project)
+                    + "%. Be prepared to articulate architecture decisions, technology selections, trade-offs, and measurable outcomes in depth.");
+        }
+
+        // 4. Response Quality
+        if (responseQuality > 0 && responseQuality < 80) {
+            areas.add("Answer Directness & Relevance: Response quality average is " + Math.round(responseQuality)
+                    + "%. Address the interviewer's exact prompt directly in your opening sentence before elaborating on tangential details.");
+        }
+
+        // 5. If all dimensions scored very high (e.g. >= 80%), provide advanced growth recommendations so the section is never empty
+        if (areas.isEmpty()) {
+            areas.add("Advanced Scenarios & Trade-offs: Strong performance across all evaluated sessions (overall average: "
+                    + Math.round(overallAverage) + "% across " + totalInterviews + " completed session(s)). Challenge yourself with Hard difficulty interviews and complex system scale scenarios.");
+            areas.add("Elevator Pitch & Executive Summary: Practice summarizing complex multi-step technical architectures into concise 60-second executive summaries.");
         }
 
         return areas;
     }
 
 
-    private Map<String, Object> buildEmptyPerformanceResponse() {
+    private Map<String, Object> buildEmptyPerformanceResponse(List<Map<String, Object>> unfinishedInterviews) {
 
         Map<String, Object> response = new HashMap<>();
 
@@ -484,6 +570,11 @@ public class OverallPerformanceService {
         response.put(
                 "recentInterviews",
                 new ArrayList<>()
+        );
+
+        response.put(
+                "unfinishedInterviews",
+                unfinishedInterviews != null ? unfinishedInterviews : new ArrayList<>()
         );
 
         response.put(

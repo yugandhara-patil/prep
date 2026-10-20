@@ -1,30 +1,37 @@
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
-
 import {
   UserRound,
   Pencil,
-  BriefcaseBusiness,
+  Briefcase,
   Code2,
-  CodeXml,
-  Globe2,
-  Link2,
+  Globe,
   Camera,
   Check,
   X,
+  Mail,
+  Award,
+  Sparkles,
+  AlertCircle,
+  Loader2,
+  ExternalLink,
+  ShieldCheck,
+  Building,
+  GraduationCap
 } from "lucide-react";
-
 import Navbar from "./Navbar";
+import Footer from "./Footer";
 
-function Profile() {
+export default function Profile() {
   const fileInputRef = useRef(null);
 
   const [isEditing, setIsEditing] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState({ type: "", text: "" });
 
   const [profile, setProfile] = useState({
     fullName: "",
@@ -44,6 +51,14 @@ function Profile() {
 
   const token = localStorage.getItem("token");
 
+  const getFullPhotoUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("blob:")) {
+      return url;
+    }
+    return `${import.meta.env.VITE_API_URL}${url}`;
+  };
+
   // =========================
   // LOAD PROFILE
   // =========================
@@ -51,10 +66,10 @@ function Profile() {
     async function loadProfile() {
       try {
         setLoading(true);
-        setMessage("");
+        setMessage({ type: "", text: "" });
 
         const response = await axios.get(
-         `${import.meta.env.VITE_API_URL}/api/profile`,
+          `${import.meta.env.VITE_API_URL}/api/profile`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -67,17 +82,15 @@ function Profile() {
         const loadedProfile = {
           fullName: data.fullName || "",
           email: data.email || "",
-
+          targetRole: data.targetRole || "",
           currentStatus: data.currentStatus || "",
-         
-
+          experienceLevel: data.experienceLevel || "",
           skills: data.skills
             ? data.skills
                 .split(",")
-                .map((skill) => skill.trim())
+                .map((s) => s.trim())
                 .filter(Boolean)
             : [],
-
           about: data.about || "",
           linkedin: data.linkedin || "",
           github: data.github || "",
@@ -89,20 +102,20 @@ function Profile() {
         setFormData(loadedProfile);
 
         if (loadedProfile.profilePhotoUrl) {
-          setProfilePhoto(loadedProfile.profilePhotoUrl);
+          setProfilePhoto(getFullPhotoUrl(loadedProfile.profilePhotoUrl));
         }
       } catch (error) {
         console.error("Profile load error:", error);
-
-        if (
-          error.response?.status === 401 ||
-          error.response?.status === 403
-        ) {
-          setMessage(
-            "Your login session is invalid or expired. Please login again."
-          );
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          setMessage({
+            type: "error",
+            text: "Your session has expired. Please sign in again.",
+          });
         } else {
-          setMessage("Unable to load profile.");
+          setMessage({
+            type: "error",
+            text: "Unable to load profile data.",
+          });
         }
       } finally {
         setLoading(false);
@@ -113,43 +126,33 @@ function Profile() {
       loadProfile();
     } else {
       setLoading(false);
-      setMessage("Please login again.");
+      setMessage({ type: "error", text: "Please sign in to view your profile." });
     }
   }, [token]);
 
   // =========================
-  // START EDIT
+  // EDIT HANDLERS
   // =========================
   function startEditing() {
     setFormData(profile);
-    setMessage("");
+    setMessage({ type: "", text: "" });
     setIsEditing(true);
   }
 
-  // =========================
-  // CANCEL EDIT
-  // =========================
   function cancelEditing() {
     setFormData(profile);
-    setMessage("");
+    setMessage({ type: "", text: "" });
     setIsEditing(false);
   }
 
-  // =========================
-  // INPUT CHANGE
-  // =========================
   function handleChange(event) {
     const { name, value } = event.target;
-
     setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
   }
 
-  // =========================
-  // SKILLS CHANGE
-  // =========================
   function handleSkillsChange(event) {
     const skills = event.target.value
       .split(",")
@@ -163,29 +166,86 @@ function Profile() {
   }
 
   // =========================
-  // PROFILE PHOTO PREVIEW
+  // PHOTO UPLOAD & PERSISTENCE
   // =========================
-  function handlePhotoChange(event) {
+  async function handlePhotoChange(event) {
     const file = event.target.files?.[0];
-
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      alert("Please select an image file.");
+      setMessage({ type: "error", text: "Please select an image file (PNG, JPG, or WEBP)." });
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      alert("Image must be smaller than 5 MB.");
+      setMessage({ type: "error", text: "Image file size must be less than 5 MB." });
       return;
     }
 
-    const imageUrl = URL.createObjectURL(file);
+    // Instant local preview
+    const previewUrl = URL.createObjectURL(file);
+    setProfilePhoto(previewUrl);
 
-    setProfilePhoto(imageUrl);
+    try {
+      setPhotoUploading(true);
+      setMessage({ type: "", text: "" });
 
-    // Preview only for now.
-    // Actual backend/storage upload will be added later.
+      const photoFormData = new FormData();
+      photoFormData.append("file", file);
+
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/profile/photo`,
+        photoFormData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      const newPhotoUrl =
+        response.data.profilePhotoUrl || response.data.photoUrl;
+
+      if (!newPhotoUrl) {
+        throw new Error("The server did not return a profile photo URL.");
+      }
+
+      const fullUrl = getFullPhotoUrl(newPhotoUrl);
+
+      setProfilePhoto(fullUrl);
+      setProfile((prev) => ({ ...prev, profilePhotoUrl: newPhotoUrl }));
+      setFormData((prev) => ({ ...prev, profilePhotoUrl: newPhotoUrl }));
+
+      // Update stored user in localStorage for global navbar consistency
+      const storedUser = localStorage.getItem("user");
+      const parsed = storedUser ? JSON.parse(storedUser) : {};
+
+      localStorage.setItem(
+        "user",
+        JSON.stringify({
+          ...parsed,
+          profilePhotoUrl: newPhotoUrl,
+        })
+      );
+
+      window.dispatchEvent(new Event("profile-updated"));
+      setMessage({ type: "success", text: "Profile photo updated successfully." });
+    } catch (err) {
+      console.error("Photo upload error:", err);
+      setMessage({
+        type: "error",
+        text: err.response?.data?.message || "Failed to upload photo. Please try again.",
+      });
+      // Revert preview on error
+      if (profile.profilePhotoUrl) {
+        setProfilePhoto(getFullPhotoUrl(profile.profilePhotoUrl));
+      } else {
+        setProfilePhoto(null);
+      }
+    } finally {
+      setPhotoUploading(false);
+    }
   }
 
   // =========================
@@ -194,28 +254,23 @@ function Profile() {
   async function saveProfile() {
     try {
       setSaving(true);
-      setMessage("");
+      setMessage({ type: "", text: "" });
 
       const requestBody = {
         fullName: formData.fullName,
         targetRole: formData.targetRole,
         currentStatus: formData.currentStatus,
         experienceLevel: formData.experienceLevel,
-
-        // React array -> backend String
         skills: formData.skills.join(","),
-
         about: formData.about,
         linkedin: formData.linkedin,
         github: formData.github,
         portfolio: formData.portfolio,
-
-        // Existing URL only for now
-        profilePhotoUrl: formData.profilePhotoUrl || "",
+        profilePhotoUrl: formData.profilePhotoUrl || profile.profilePhotoUrl || "",
       };
 
       const response = await axios.put(
-       `${import.meta.env.VITE_API_URL}/api/profile`,
+        `${import.meta.env.VITE_API_URL}/api/profile`,
         requestBody,
         {
           headers: {
@@ -225,21 +280,18 @@ function Profile() {
       );
 
       const data = response.data;
-
       const updatedProfile = {
         fullName: data.fullName || "",
         email: data.email || "",
         targetRole: data.targetRole || "",
         currentStatus: data.currentStatus || "",
         experienceLevel: data.experienceLevel || "",
-
         skills: data.skills
           ? data.skills
               .split(",")
-              .map((skill) => skill.trim())
+              .map((s) => s.trim())
               .filter(Boolean)
           : [],
-
         about: data.about || "",
         linkedin: data.linkedin || "",
         github: data.github || "",
@@ -251,640 +303,542 @@ function Profile() {
       setFormData(updatedProfile);
 
       const storedUser = localStorage.getItem("user");
-
       if (storedUser) {
         const user = JSON.parse(storedUser);
-
         localStorage.setItem(
           "user",
           JSON.stringify({
             ...user,
             fullName: updatedProfile.fullName,
+            profilePhotoUrl: updatedProfile.profilePhotoUrl,
           })
         );
       }
 
-      setMessage("Profile updated successfully.");
+      window.dispatchEvent(new Event("profile-updated"));
+      setMessage({ type: "success", text: "Profile details updated successfully." });
       setIsEditing(false);
     } catch (error) {
       console.error("Profile update error:", error);
-
-      if (
-        error.response?.status === 401 ||
-        error.response?.status === 403
-      ) {
-        setMessage(
-          "Your login session is invalid or expired. Please login again."
-        );
-      } else {
-        setMessage(
-          error.response?.data?.message ||
-            "Unable to update profile."
-        );
-      }
+      setMessage({
+        type: "error",
+        text: error.response?.data?.message || "Failed to update profile.",
+      });
     } finally {
       setSaving(false);
     }
   }
 
-  // =========================
-  // LOADING SCREEN
-  // =========================
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F7F7FB]">
+      <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
         <Navbar />
-
-        <div className="flex min-h-[70vh] items-center justify-center">
-          <p className="font-semibold text-slate-500">
-            Loading profile...
-          </p>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex items-center gap-3 text-slate-500 font-medium text-sm">
+            <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+            Loading profile information...
+          </div>
         </div>
+        <Footer />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F7FB]">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
       <Navbar />
 
-      <main className="mx-auto max-w-6xl px-5 pb-16 pt-8 md:px-8 lg:px-10">
-
-        {/* PAGE TITLE */}
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-
+      <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        
+        {/* Header Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-6">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#8A78C8]">
-              Your Profile
-            </p>
-
-            <h1 className="mt-2 text-3xl font-extrabold text-slate-950 md:text-4xl">
-              Profile
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold uppercase tracking-wider mb-2">
+              <UserRound className="w-3.5 h-3.5" />
+              Candidate Profile & Persona
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              Professional Profile
             </h1>
-
-            <p className="mt-2 text-slate-500">
-              Manage your personal and professional information.
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              Your profile background helps Maya personalize both technical architecture questions and HR behavioral scenarios.
             </p>
           </div>
 
-          {/* EDIT / SAVE */}
-          {!isEditing ? (
-            <button
-              type="button"
-              onClick={startEditing}
-              className="flex items-center justify-center gap-2 rounded-xl bg-[#6D4DE8] px-5 py-3 font-semibold text-white shadow-md shadow-purple-200 transition hover:-translate-y-0.5 hover:bg-[#5E3FD1]"
-            >
-              <Pencil size={17} />
-              Edit Profile
-            </button>
-          ) : (
-            <div className="flex gap-3">
-
+          <div>
+            {!isEditing ? (
               <button
                 type="button"
-                onClick={cancelEditing}
-                disabled={saving}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                onClick={startEditing}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-xs transition"
               >
-                <X size={17} />
-                Cancel
+                <Pencil className="w-3.5 h-3.5" />
+                Edit Profile
               </button>
-
-              <button
-                type="button"
-                onClick={saveProfile}
-                disabled={saving}
-                className="flex items-center gap-2 rounded-xl bg-[#6D4DE8] px-5 py-3 font-semibold text-white shadow-md shadow-purple-200 hover:bg-[#5E3FD1] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Check size={17} />
-
-                {saving ? "Saving..." : "Save Changes"}
-              </button>
-
-            </div>
-          )}
-
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={cancelEditing}
+                  disabled={saving || photoUploading}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium text-xs transition"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={saveProfile}
+                  disabled={saving || photoUploading}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-xs transition disabled:opacity-60"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      Save Changes
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* MESSAGE */}
-        {message && (
+        {/* Status Message Alert */}
+        {message.text && (
           <div
-            className={`mb-6 rounded-xl px-4 py-3 text-sm font-semibold ${
-              message === "Profile updated successfully."
-                ? "border border-green-200 bg-green-50 text-green-700"
-                : "border border-red-200 bg-red-50 text-red-600"
+            className={`p-4 rounded-xl flex items-center gap-3 text-xs font-medium border ${
+              message.type === "success"
+                ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                : "bg-rose-50 border-rose-200 text-rose-800"
             }`}
           >
-            {message}
+            {message.type === "success" ? (
+              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{message.text}</span>
           </div>
         )}
 
-        {/* PROFILE CARD */}
-        <section className="relative overflow-hidden rounded-[28px] border border-purple-100 bg-white p-7 shadow-[0_18px_55px_rgba(109,77,232,0.08)] md:p-8">
+        {/* 2-Column Responsive Layout using Full Width */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* LEFT COLUMN (4 cols): Identity Card & Links */}
+          <div className="lg:col-span-4 space-y-6">
+            
+            {/* Identity Card */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs text-center space-y-4">
+              <div className="relative inline-block mx-auto">
+                <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl bg-indigo-50 border-2 border-indigo-100 flex items-center justify-center overflow-hidden shadow-xs mx-auto">
+                  {profilePhoto ? (
+                    <img
+                      src={profilePhoto}
+                      alt={profile.fullName || "Candidate"}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-4xl font-extrabold text-indigo-600">
+                      {profile.fullName?.charAt(0) || "U"}
+                    </span>
+                  )}
+                </div>
 
-          <div className="absolute right-0 top-0 h-56 w-56 rounded-full bg-purple-100/70 blur-3xl" />
-
-          <div className="relative z-10 flex flex-col gap-7 md:flex-row md:items-center">
-
-            {/* PROFILE PHOTO */}
-            <div className="relative shrink-0">
-
-              <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-gradient-to-br from-[#6D4DE8] to-[#9A79FF] text-white shadow-lg shadow-purple-200">
-
-                {profilePhoto ? (
-                  <img
-                    src={profilePhoto}
-                    alt="Profile"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <UserRound size={48} />
+                {photoUploading && (
+                  <div className="absolute inset-0 bg-slate-900/60 rounded-2xl flex items-center justify-center text-white">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  </div>
                 )}
 
-              </div>
-
-              {isEditing && (
-                <>
+                {/* Camera upload button ONLY visible when in Edit mode */}
+                {isEditing && (
                   <button
                     type="button"
-                    onClick={() =>
-                      fileInputRef.current?.click()
-                    }
-                    className="absolute bottom-0 right-0 flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-[#6D4DE8] text-white shadow-md hover:bg-[#5E3FD1]"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={photoUploading}
                     title="Upload profile photo"
+                    className="absolute -bottom-2 -right-2 p-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-md border-2 border-white transition disabled:opacity-60"
                   >
-                    <Camera size={17} />
+                    <Camera className="w-4 h-4" />
                   </button>
+                )}
 
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/jpg,image/webp"
-                    onChange={handlePhotoChange}
-                    className="hidden"
-                  />
-                </>
-              )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handlePhotoChange}
+                  className="hidden"
+                />
+              </div>
 
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  {profile.fullName || "Candidate"}
+                </h2>
+                <p className="text-xs text-slate-500 flex items-center justify-center gap-1.5 mt-1">
+                  <Mail className="w-3.5 h-3.5" />
+                  {profile.email}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap justify-center gap-2 pt-1 border-t border-slate-100">
+                {profile.targetRole && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    <Briefcase className="w-3 h-3" />
+                    {profile.targetRole}
+                  </span>
+                )}
+                {profile.experienceLevel && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                    <Award className="w-3 h-3" />
+                    {profile.experienceLevel}
+                  </span>
+                )}
+                {profile.currentStatus && (
+                  <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    {profile.currentStatus}
+                  </span>
+                )}
+              </div>
             </div>
 
-            {/* MAIN INFO */}
-            <div className="flex-1">
+            {/* Professional Links Card */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                External Profiles & Portfolio
+              </h3>
+
+              <div className="space-y-2 pt-1">
+                <LinkItem label="LinkedIn" url={profile.linkedin} icon={Globe} />
+                <LinkItem label="GitHub" url={profile.github} icon={Code2} />
+                <LinkItem label="Personal Portfolio" url={profile.portfolio} icon={Globe} />
+              </div>
+            </div>
+
+            {/* Preparation Guarantee Note */}
+            <div className="p-4 rounded-xl bg-slate-100 border border-slate-200 text-xs text-slate-600 flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+              <span>Your profile details are stored securely and utilized exclusively to formulate relevant interview questions.</span>
+            </div>
+
+          </div>
+
+          {/* RIGHT COLUMN (8 cols): Information Form / Display */}
+          <div className="lg:col-span-8 space-y-6">
+            
+            {/* 1. Core Profile Details */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-5">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 className="text-sm font-bold text-slate-900">
+                  Career Identity & Experience
+                </h3>
+                <span className="text-[11px] text-slate-400 font-medium">Primary Info</span>
+              </div>
 
               {isEditing ? (
-                <div className="grid gap-4 md:grid-cols-2">
-
-                  {/* FULL NAME */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
                       Full Name
                     </label>
-
                     <input
                       type="text"
                       name="fullName"
                       value={formData.fullName}
                       onChange={handleChange}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-[#6D4DE8] focus:ring-2 focus:ring-purple-100"
+                      className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none"
                     />
                   </div>
 
-                  {/* TARGET ROLE */}
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Target Role
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Email Address <span className="text-slate-400 font-normal">(Account bound)</span>
                     </label>
-
-                    <select
-                      name="targetRole"
-                      value={formData.targetRole}
-                      onChange={handleChange}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-[#6D4DE8] focus:ring-2 focus:ring-purple-100"
-                    >
-                      <option value="">Select role</option>
-                      <option>Full Stack Developer</option>
-                      <option>Frontend Developer</option>
-                      <option>Backend Developer</option>
-                      <option>Software Developer</option>
-                      <option>Java Developer</option>
-                      <option>Data Analyst</option>
-                      <option>Data Scientist</option>
-                      <option>Machine Learning Engineer</option>
-                    </select>
-                  </div>
-
-                  {/* EMAIL */}
-                  <div className="md:col-span-2">
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Email
-                    </label>
-
                     <input
                       type="email"
                       value={profile.email}
                       disabled
-                      className="w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-500"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm text-slate-500 cursor-not-allowed"
                     />
                   </div>
 
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Target Role
+                    </label>
+                    <select
+                      name="targetRole"
+                      value={formData.targetRole}
+                      onChange={handleChange}
+                      className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none"
+                    >
+                      <option value="">Select target role</option>
+                      <option>Software Engineer</option>
+                      <option>Full Stack Developer</option>
+                      <option>Frontend Developer</option>
+                      <option>Backend Developer</option>
+                      <option>Java Developer</option>
+                      <option>Data Analyst</option>
+                      <option>Data Scientist</option>
+                      <option>Machine Learning Engineer</option>
+                      <option>DevOps Engineer</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Experience Level
+                    </label>
+                    <select
+                      name="experienceLevel"
+                      value={formData.experienceLevel}
+                      onChange={handleChange}
+                      className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none"
+                    >
+                      <option value="">Select level</option>
+                      <option>Fresher / Student</option>
+                      <option>0 - 1 Years</option>
+                      <option>1 - 3 Years</option>
+                      <option>3 - 5 Years</option>
+                      <option>5+ Years</option>
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Current Professional Status
+                    </label>
+                    <select
+                      name="currentStatus"
+                      value={formData.currentStatus}
+                      onChange={handleChange}
+                      className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none"
+                    >
+                      <option value="">Select status</option>
+                      <option>Student</option>
+                      <option>Fresher / Actively Looking</option>
+                      <option>Working Professional</option>
+                    </select>
+                  </div>
                 </div>
               ) : (
-                <>
-                  <h2 className="text-3xl font-extrabold text-slate-950">
-                    {profile.fullName || "Complete your profile"}
-                  </h2>
-
-                  <p className="mt-1 text-slate-500">
-                    {profile.email}
-                  </p>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-
-                    {profile.targetRole && (
-                      <span className="rounded-full bg-[#F0EBFF] px-3 py-1.5 text-sm font-semibold text-[#6D4DE8]">
-                        {profile.targetRole}
-                      </span>
-                    )}
-
-                    {profile.currentStatus && (
-                      <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-600">
-                        {profile.currentStatus}
-                      </span>
-                    )}
-
-                    {profile.experienceLevel && (
-                      <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-600">
-                        {profile.experienceLevel}
-                      </span>
-                    )}
-
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div>
+                    <span className="text-xs text-slate-400 block font-medium">Target Job Role</span>
+                    <p className="text-sm font-semibold text-slate-900 mt-1">
+                      {profile.targetRole || "Not specified"}
+                    </p>
                   </div>
-                </>
+
+                  <div>
+                    <span className="text-xs text-slate-400 block font-medium">Experience Level</span>
+                    <p className="text-sm font-semibold text-slate-900 mt-1">
+                      {profile.experienceLevel || "Not specified"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span className="text-xs text-slate-400 block font-medium">Current Status</span>
+                    <p className="text-sm font-semibold text-slate-900 mt-1">
+                      {profile.currentStatus || "Not specified"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span className="text-xs text-slate-400 block font-medium">Account Email</span>
+                    <p className="text-sm font-semibold text-slate-900 mt-1">
+                      {profile.email}
+                    </p>
+                  </div>
+                </div>
               )}
-
             </div>
 
-          </div>
-
-        </section>
-
-        {/* PROFESSIONAL + ABOUT */}
-        <div className="mt-7 grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-
-          {/* PROFESSIONAL INFO */}
-          <section className="rounded-[24px] border border-slate-100 bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.05)]">
-
-            <div className="mb-6 flex items-center gap-3">
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#F0EBFF] text-[#6D4DE8]">
-                <BriefcaseBusiness size={22} />
+            {/* 2. Technical Skills */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
+                    <Code2 className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Technical Skills & Domain Expertise
+                  </h3>
+                </div>
+                <span className="text-[11px] text-slate-400 font-medium">Resume Topics</span>
               </div>
 
-              <div>
-                <h2 className="text-xl font-bold text-slate-950">
-                  Professional Information
-                </h2>
-
-                <p className="text-sm text-slate-500">
-                  Your current career profile.
-                </p>
-              </div>
-
-            </div>
-
-            {isEditing ? (
-              <div className="space-y-5">
-
-                <SelectField
-                  label="Current Status"
-                  name="currentStatus"
-                  value={formData.currentStatus}
-                  onChange={handleChange}
-                  options={[
-                    "",
-                    "Student",
-                    "Fresher",
-                    "Working Professional",
-                  ]}
-                />
-
-                <SelectField
-                  label="Experience Level"
-                  name="experienceLevel"
-                  value={formData.experienceLevel}
-                  onChange={handleChange}
-                  options={[
-                    "",
-                    "Fresher",
-                    "0 - 1 Years",
-                    "1 - 3 Years",
-                    "3 - 5 Years",
-                    "5+ Years",
-                  ]}
-                />
-
+              {isEditing ? (
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Skills
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Skills (Comma separated list)
                   </label>
-
                   <input
                     type="text"
                     value={formData.skills.join(", ")}
                     onChange={handleSkillsChange}
-                    placeholder="Java, React, Spring Boot, SQL"
-                    className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none transition focus:border-[#6D4DE8] focus:ring-2 focus:ring-purple-100"
+                    placeholder="Java, Spring Boot, React, SQL, AWS, Microservices"
+                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-900 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none"
                   />
-
-                  <p className="mt-2 text-xs text-slate-400">
-                    Separate skills using commas.
+                  <p className="text-[11px] text-slate-400 mt-1.5">
+                    Maya extracts and aligns conceptual questions with these skills.
                   </p>
                 </div>
-
-              </div>
-            ) : (
-              <div className="space-y-6">
-
-                <InfoRow
-                  label="Current Status"
-                  value={profile.currentStatus}
-                />
-
-                <InfoRow
-                  label="Experience Level"
-                  value={profile.experienceLevel}
-                />
-
+              ) : (
                 <div>
-                  <p className="text-sm font-semibold text-slate-500">
-                    Skills
-                  </p>
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-
-                    {profile.skills.length > 0 ? (
-                      profile.skills.map((skill) => (
+                  {profile.skills.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {profile.skills.map((skill) => (
                         <span
                           key={skill}
-                          className="rounded-lg bg-[#F6F3FF] px-3 py-1.5 text-sm font-semibold text-[#6D4DE8]"
+                          className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200"
                         >
                           {skill}
                         </span>
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-400">
-                        Not added
-                      </p>
-                    )}
-
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">No technical skills added yet. Click Edit Profile to add skills.</p>
+                  )}
                 </div>
-
-              </div>
-            )}
-
-          </section>
-
-          {/* ABOUT */}
-          <section className="rounded-[24px] border border-slate-100 bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.05)]">
-
-            <div className="mb-6 flex items-center gap-3">
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EAF4FF] text-[#3182CE]">
-                <Code2 size={22} />
-              </div>
-
-              <div>
-                <h2 className="text-xl font-bold text-slate-950">
-                  About
-                </h2>
-
-                <p className="text-sm text-slate-500">
-                  A short professional introduction.
-                </p>
-              </div>
-
+              )}
             </div>
 
-            {isEditing ? (
-              <>
-                <textarea
-                  name="about"
-                  value={formData.about}
-                  onChange={handleChange}
-                  rows={7}
-                  maxLength={300}
-                  placeholder="Write a short professional introduction..."
-                  className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 leading-7 outline-none transition focus:border-[#6D4DE8] focus:ring-2 focus:ring-purple-100"
-                />
+            {/* 3. About & Summary */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Professional Summary & Background
+                  </h3>
+                </div>
+                <span className="text-[11px] text-slate-400 font-medium">Self-Introduction</span>
+              </div>
 
-                <p className="mt-2 text-right text-xs text-slate-400">
-                  {formData.about.length}/300
+              {isEditing ? (
+                <div>
+                  <textarea
+                    name="about"
+                    value={formData.about}
+                    onChange={handleChange}
+                    rows={4}
+                    maxLength={500}
+                    placeholder="Share a concise summary of your technical background, core projects, and career aspirations..."
+                    className="w-full rounded-xl border border-slate-300 p-3 text-sm text-slate-900 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none resize-none"
+                  />
+                  <p className="text-[11px] text-slate-400 text-right mt-1">
+                    {formData.about.length}/500 characters
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                  {profile.about || "No summary provided. Add a brief career overview to help Maya conduct more relevant introductory dialog."}
                 </p>
-              </>
-            ) : (
-              <p className="leading-7 text-slate-600">
-                {profile.about || "No introduction added yet."}
-              </p>
+              )}
+            </div>
+
+            {/* 4. Social & Portfolio Edit Fields (visible in edit mode) */}
+            {isEditing && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Professional URLs
+                  </h3>
+                  <span className="text-[11px] text-slate-400 font-medium">Links</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      LinkedIn URL
+                    </label>
+                    <input
+                      type="url"
+                      name="linkedin"
+                      value={formData.linkedin}
+                      onChange={handleChange}
+                      placeholder="https://linkedin.com/in/username"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-indigo-600 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      GitHub URL
+                    </label>
+                    <input
+                      type="url"
+                      name="github"
+                      value={formData.github}
+                      onChange={handleChange}
+                      placeholder="https://github.com/username"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-indigo-600 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Portfolio URL
+                    </label>
+                    <input
+                      type="url"
+                      name="portfolio"
+                      value={formData.portfolio}
+                      onChange={handleChange}
+                      placeholder="https://myportfolio.dev"
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-indigo-600 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
             )}
 
-          </section>
+          </div>
 
         </div>
 
-        {/* PROFESSIONAL LINKS */}
-        <section className="mt-7 rounded-[24px] border border-slate-100 bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.05)]">
-
-          <div className="mb-6">
-            <h2 className="text-xl font-bold text-slate-950">
-              Professional Links
-            </h2>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Add your professional profiles and portfolio.
-            </p>
-          </div>
-
-          {isEditing ? (
-            <div className="grid gap-5 md:grid-cols-3">
-
-              <InputField
-                label="LinkedIn"
-                name="linkedin"
-                value={formData.linkedin}
-                onChange={handleChange}
-                placeholder="https://linkedin.com/in/username"
-              />
-
-              <InputField
-                label="GitHub"
-                name="github"
-                value={formData.github}
-                onChange={handleChange}
-                placeholder="https://github.com/username"
-              />
-
-              <InputField
-                label="Portfolio"
-                name="portfolio"
-                value={formData.portfolio}
-                onChange={handleChange}
-                placeholder="https://yourportfolio.com"
-              />
-
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-3">
-
-              <LinkCard
-                icon={Link2}
-                title="LinkedIn"
-                value={profile.linkedin}
-              />
-
-              <LinkCard
-                icon={CodeXml}
-                title="GitHub"
-                value={profile.github}
-              />
-
-              <LinkCard
-                icon={Globe2}
-                title="Portfolio"
-                value={profile.portfolio}
-              />
-
-            </div>
-          )}
-
-        </section>
-
       </main>
+
+      <Footer />
     </div>
   );
 }
 
-
-// =========================
-// SMALL COMPONENTS
-// =========================
-
-function InfoRow({ label, value }) {
-  return (
-    <div className="border-b border-slate-100 pb-5 last:border-none last:pb-0">
-
-      <p className="text-sm font-semibold text-slate-500">
-        {label}
-      </p>
-
-      <p className="mt-1 font-bold text-slate-900">
-        {value || "Not added"}
-      </p>
-
-    </div>
-  );
-}
-
-
-function SelectField({
-  label,
-  name,
-  value,
-  onChange,
-  options,
-}) {
-  return (
-    <div>
-
-      <label className="mb-2 block text-sm font-semibold text-slate-700">
-        {label}
-      </label>
-
-      <select
-        name={name}
-        value={value}
-        onChange={onChange}
-        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-[#6D4DE8] focus:ring-2 focus:ring-purple-100"
-      >
-        {options.map((option, index) => (
-          <option
-            key={`${option}-${index}`}
-            value={option}
-          >
-            {option || "Select"}
-          </option>
-        ))}
-      </select>
-
-    </div>
-  );
-}
-
-
-function InputField({
-  label,
-  name,
-  value,
-  onChange,
-  placeholder,
-}) {
-  return (
-    <div>
-
-      <label className="mb-2 block text-sm font-semibold text-slate-700">
-        {label}
-      </label>
-
-      <input
-        type="text"
-        name={name}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-[#6D4DE8] focus:ring-2 focus:ring-purple-100"
-      />
-
-    </div>
-  );
-}
-
-
-function LinkCard({
-  icon: Icon,
-  title,
-  value,
-}) {
-  const hasValue =
-    value && value.trim() !== "";
-
-  return (
-    <div className="rounded-[18px] border border-slate-100 bg-[#FAFAFC] p-5 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md">
-
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F0EBFF] text-[#6D4DE8]">
-        <Icon size={20} />
+function LinkItem({ label, url, icon: Icon }) {
+  if (!url) {
+    return (
+      <div className="p-3 rounded-xl border border-slate-100 bg-slate-50 flex items-center justify-between text-xs text-slate-400">
+        <div className="flex items-center gap-2.5">
+          <Icon className="w-4 h-4 text-slate-400" />
+          <span>{label}</span>
+        </div>
+        <span className="text-[10px] text-slate-400">Not added</span>
       </div>
+    );
+  }
 
-      <h3 className="mt-4 font-bold text-slate-900">
-        {title}
-      </h3>
-
-      {hasValue ? (
-        <a
-          href={value}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-1 block truncate text-sm font-semibold text-[#6D4DE8] hover:underline"
-        >
-          {value}
-        </a>
-      ) : (
-        <p className="mt-1 text-sm text-slate-400">
-          Not added
-        </p>
-      )}
-
-    </div>
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="p-3 rounded-xl border border-slate-200 hover:border-indigo-300 bg-white hover:bg-indigo-50/30 flex items-center justify-between text-xs text-slate-700 hover:text-indigo-600 transition group"
+    >
+      <div className="flex items-center gap-2.5">
+        <Icon className="w-4 h-4 text-slate-500 group-hover:text-indigo-600 transition" />
+        <span className="font-semibold">{label}</span>
+      </div>
+      <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 transition" />
+    </a>
   );
 }
-
-export default Profile;

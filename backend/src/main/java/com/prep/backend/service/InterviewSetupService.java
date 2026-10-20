@@ -54,12 +54,16 @@ public class InterviewSetupService {
         }
 
         Difficulty difficulty;
-        try {
-            difficulty = Difficulty.valueOf(
-                    request.getDifficulty().toUpperCase()
-            );
-        } catch (Exception exception) {
-            throw new RuntimeException("Invalid difficulty");
+        if (interviewType == InterviewType.HR && (request.getDifficulty() == null || request.getDifficulty().isBlank())) {
+            difficulty = Difficulty.MEDIUM;
+        } else {
+            try {
+                difficulty = Difficulty.valueOf(
+                        request.getDifficulty().toUpperCase()
+                );
+            } catch (Exception exception) {
+                throw new RuntimeException("Invalid difficulty");
+            }
         }
 
         Interview interview = new Interview();

@@ -121,13 +121,24 @@ public class InterviewService {
 
         stage = stage.trim().toUpperCase();
 
+        List<InterviewAnswer> previousAnswers =
+                interviewAnswerRepository.findByInterviewOrderByIdAsc(
+                        interview
+                );
+
         String nextStage;
 
-        if ("START_PERMISSION".equals(stage)
-                && interview.getInterviewType() != InterviewType.HR) {
+        if ("START_PERMISSION".equals(stage)) {
 
             nextStage = interviewFlowService.determineStartPermissionStage(
                     request.getUserAnswer()
+            );
+
+        } else if ("CANDIDATE_QUESTIONS".equals(stage)) {
+
+            nextStage = interviewFlowService.determineCandidateQuestionsStage(
+                    request.getUserAnswer(),
+                    previousAnswers
             );
 
         } else {
@@ -137,11 +148,6 @@ public class InterviewService {
                     stage
             );
         }
-
-        List<InterviewAnswer> previousAnswers =
-                interviewAnswerRepository.findByInterviewOrderByIdAsc(
-                        interview
-                );
 
         AnswerResponse answerResponse =
                 interviewQuestionService.generateInterviewResponse(
@@ -159,18 +165,26 @@ public class InterviewService {
             );
         }
 
+        // If the candidate made an unrelated remark, insult, joke, or clarification request:
+        // Do NOT save as evaluated answer, do NOT advance stage, and do NOT complete the interview.
+        if (Boolean.TRUE.equals(answerResponse.isConversationalRemark())) {
+            answerResponse.setNextStage(stage);
+            answerResponse.setNextQuestion(request.getCurrentQuestion());
+            return answerResponse;
+        }
+
         answerResponse.setNextStage(nextStage);
 
         /*
          * Persist the candidate's answer only after Gemini has produced
          * a valid evaluation and next question.
          */
-       interviewAnswerService.saveAnswer(
-        interview,
-        request,
-        answerResponse,
-        stage
-);
+        interviewAnswerService.saveAnswer(
+                interview,
+                request,
+                answerResponse,
+                stage
+        );
 
 // Mark the interview as completed when the closing stage is reached.
 if ("CLOSING".equals(nextStage)) {
@@ -232,6 +246,81 @@ if ("CLOSING".equals(nextStage)) {
                 email,
                 interviewId
         );
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public java.util.Map<String, Object> resumeInterview(
+            String email,
+            Long interviewId
+    ) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        Interview interview = interviewRepository.findById(interviewId)
+                .orElseThrow(() -> new RuntimeException("Interview not found"));
+
+        validateOwnership(interview, user);
+
+        List<InterviewAnswer> previousAnswers =
+                interviewAnswerRepository.findByInterviewOrderByIdAsc(interview);
+
+        String conversationStage = "GREETING";
+        String currentQuestion;
+
+        if (previousAnswers.isEmpty()) {
+            conversationStage = "GREETING";
+            currentQuestion = "Hello, " + user.getFullName() + ", it's nice to meet you.";
+        } else {
+            InterviewAnswer lastAnswer = previousAnswers.get(previousAnswers.size() - 1);
+            String lastStage = lastAnswer.getStage();
+            String nextStage = interviewFlowService.determineNextStage(interview.getInterviewType(), lastStage);
+            conversationStage = nextStage;
+
+            if (interviewFlowService.isFixedQuestionStage(nextStage)) {
+                currentQuestion = interviewFlowService.getFixedQuestion(nextStage, user.getFullName());
+            } else {
+                NextQuestionRequest nextReq = new NextQuestionRequest();
+                nextReq.setInterviewId(interviewId);
+                nextReq.setCurrentQuestion(lastAnswer.getQuestion());
+                NextQuestionResponse gen = interviewQuestionService.generateNextQuestion(interview, user, nextReq);
+                currentQuestion = gen.getNextQuestion();
+            }
+        }
+
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        response.put("interviewId", interview.getId());
+        response.put("interviewType", interview.getInterviewType() != null ? interview.getInterviewType().name() : "TECHNICAL");
+        response.put("difficulty", interview.getDifficulty() != null ? interview.getDifficulty().name() : "MEDIUM");
+        response.put("targetRole", interview.getTargetRole());
+        response.put("technicalFocus", interview.getTechnicalFocus());
+        response.put("resumeName", interview.getResumeFileName());
+        response.put("conversationStage", conversationStage);
+        response.put("firstQuestion", currentQuestion);
+        response.put("questionsAnswered", previousAnswers.size());
+        response.put("status", interview.getStatus().name());
+
+        return response;
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public com.prep.backend.dto.MessageResponse discardInterview(
+            String email,
+            Long interviewId
+    ) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        Interview interview = interviewRepository.findById(interviewId)
+                .orElseThrow(() -> new RuntimeException("Interview not found"));
+
+        validateOwnership(interview, user);
+
+        List<InterviewAnswer> answers =
+                interviewAnswerRepository.findByInterviewOrderByIdAsc(interview);
+        interviewAnswerRepository.deleteAll(answers);
+        interviewRepository.delete(interview);
+
+        return new com.prep.backend.dto.MessageResponse("Interview deleted successfully");
     }
 
     /**

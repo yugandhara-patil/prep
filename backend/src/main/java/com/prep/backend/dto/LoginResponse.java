@@ -8,6 +8,7 @@ public class LoginResponse {
     private String role;
     private String token;
     private String message;
+    private String profilePhotoUrl;
 
     public LoginResponse() {
     }
@@ -26,6 +27,24 @@ public class LoginResponse {
         this.role = role;
         this.token = token;
         this.message = message;
+    }
+
+    public LoginResponse(
+            Long id,
+            String fullName,
+            String email,
+            String role,
+            String token,
+            String message,
+            String profilePhotoUrl
+    ) {
+        this.id = id;
+        this.fullName = fullName;
+        this.email = email;
+        this.role = role;
+        this.token = token;
+        this.message = message;
+        this.profilePhotoUrl = profilePhotoUrl;
     }
 
     public Long getId() {
@@ -74,5 +93,13 @@ public class LoginResponse {
 
     public void setMessage(String message) {
         this.message = message;
+    }
+
+    public String getProfilePhotoUrl() {
+        return profilePhotoUrl;
+    }
+
+    public void setProfilePhotoUrl(String profilePhotoUrl) {
+        this.profilePhotoUrl = profilePhotoUrl;
     }
 }
