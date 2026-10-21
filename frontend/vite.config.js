@@ -8,6 +8,9 @@ export default defineConfig({
     tailwindcss(),
   ],
 
+  // Expose both VITE_ and GOOGLE_ environment variables to import.meta.env
+  envPrefix: ["VITE_", "GOOGLE_"],
+
   // Tell Vite that .glb files are 3D asset files
   assetsInclude: ["**/*.glb"],
 });

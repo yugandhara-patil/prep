@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { User, Mail, Lock, Eye, EyeOff, AlertCircle, Sparkles, Mic, Award, ArrowRight, Loader2, Check } from "lucide-react";
 import axios from "axios";
-import avatarImage from "../assets/avatar.png";
 import authHeroImage from "../assets/auth-hero.jpg";
 import PrepLogo from "../components/PrepLogo";
+import { getGoogleClientId } from "../utils/googleAuth";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -97,80 +97,92 @@ export default function Signup() {
   const gisInitializedRef = useRef(false);
   const [googleAvailable, setGoogleAvailable] = useState(false);
 
-  // Initialize Google Identity Services once on mount
+  // Initialize Google Identity Services on mount using resolved Client ID
   useEffect(() => {
-    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    if (!googleClientId) return;
-
+    let isCancelled = false;
     let timer;
-    const initGoogle = () => {
-      if (!window.google?.accounts?.id || !googleButtonRef.current) {
-        return false;
+
+    async function initGis() {
+      const googleClientId = await getGoogleClientId();
+      if (isCancelled || !googleClientId) {
+        if (!googleClientId) {
+          console.warn("Google Client ID not configured.");
+        }
+        return;
       }
 
-      try {
-        if (!gisInitializedRef.current) {
-          window.google.accounts.id.initialize({
-            client_id: googleClientId,
-            callback: async (res) => {
-              if (!res?.credential) return;
-              try {
-                setGoogleLoading(true);
-                setErrorMessage("");
-                setInfoMessage("");
-                const response = await axios.post(
-                  `${import.meta.env.VITE_API_URL}/api/auth/google`,
-                  { idToken: res.credential }
-                );
-                handleSuccessfulAuth(response.data);
-              } catch (err) {
-                console.error("Google authentication error:", err);
-                setErrorMessage(
-                  err.response?.data?.message || "Failed to authenticate with Google. Please try again or register with email."
-                );
-              } finally {
-                setGoogleLoading(false);
-              }
-            },
-            auto_select: false,
-            cancel_on_tap_outside: true,
-            itp_support: true,
+      const initGoogle = () => {
+        if (!window.google?.accounts?.id || !googleButtonRef.current) {
+          return false;
+        }
+
+        try {
+          if (!gisInitializedRef.current) {
+            window.google.accounts.id.initialize({
+              client_id: googleClientId,
+              callback: async (res) => {
+                if (!res?.credential) return;
+                try {
+                  setGoogleLoading(true);
+                  setErrorMessage("");
+                  setInfoMessage("");
+                  const response = await axios.post(
+                    `${import.meta.env.VITE_API_URL || ""}/api/auth/google`,
+                    { idToken: res.credential }
+                  );
+                  handleSuccessfulAuth(response.data);
+                } catch (err) {
+                  console.error("Google authentication error:", err);
+                  setErrorMessage(
+                    err.response?.data?.message || "Failed to authenticate with Google. Please try again or register with email."
+                  );
+                } finally {
+                  setGoogleLoading(false);
+                }
+              },
+              auto_select: false,
+              cancel_on_tap_outside: true,
+              itp_support: true,
+            });
+            gisInitializedRef.current = true;
+          }
+
+          const container = googleButtonRef.current;
+          container.innerHTML = "";
+          const containerWidth = Math.min(Math.max(container.offsetWidth || 340, 240), 400);
+
+          window.google.accounts.id.renderButton(container, {
+            theme: "outline",
+            size: "large",
+            text: "continue_with",
+            shape: "rectangular",
+            logo_alignment: "left",
+            width: containerWidth,
           });
-          gisInitializedRef.current = true;
+
+          setGoogleAvailable(true);
+          return true;
+        } catch (err) {
+          console.warn("Failed to initialize Google Sign-In:", err);
+          return false;
         }
+      };
 
-        const container = googleButtonRef.current;
-        container.innerHTML = "";
-        const containerWidth = Math.min(Math.max(container.offsetWidth || 340, 240), 400);
-
-        window.google.accounts.id.renderButton(container, {
-          theme: "outline",
-          size: "large",
-          text: "continue_with",
-          shape: "rectangular",
-          logo_alignment: "left",
-          width: containerWidth,
-        });
-
-        setGoogleAvailable(true);
-        return true;
-      } catch (err) {
-        console.warn("Failed to initialize Google Sign-In:", err);
-        return false;
+      if (!initGoogle()) {
+        let attempts = 0;
+        timer = setInterval(() => {
+          attempts++;
+          if (initGoogle() || attempts > 25) {
+            clearInterval(timer);
+          }
+        }, 200);
       }
-    };
-
-    if (!initGoogle()) {
-      let attempts = 0;
-      timer = setInterval(() => {
-        attempts++;
-        if (initGoogle() || attempts > 20) {
-          clearInterval(timer);
-        }
-      }, 250);
     }
 
+    initGis();
+
     return () => {
+      isCancelled = true;
       if (timer) clearInterval(timer);
     };
   }, []);
@@ -199,7 +211,7 @@ export default function Signup() {
           <div className="overflow-hidden rounded-2xl border border-slate-700/60 shadow-xl bg-slate-950">
             <img
               src={authHeroImage}
-              alt="Professional candidate preparing for a mock interview"
+              alt="Maya AI interview companion and coach"
               className="w-full h-[300px] xl:h-[340px] object-cover object-center"
             />
           </div>
@@ -231,8 +243,8 @@ export default function Signup() {
             <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 shadow-xs max-h-36">
               <img
                 src={authHeroImage}
-                alt="AI Interview Preparation"
-                className="w-full h-36 object-cover object-top"
+                alt="Maya AI interview companion and coach"
+                className="w-full h-36 object-cover object-center"
               />
             </div>
           </div>

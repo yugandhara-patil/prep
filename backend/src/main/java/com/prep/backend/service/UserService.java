@@ -53,6 +53,10 @@ public class UserService {
         this.emailService = emailService;
     }
 
+    public String getGoogleClientId() {
+        return this.googleClientId;
+    }
+
     public User registerUser(RegisterRequest request) {
 
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {

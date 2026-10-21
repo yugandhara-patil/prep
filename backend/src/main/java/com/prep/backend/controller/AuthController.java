@@ -1,7 +1,10 @@
 package com.prep.backend.controller;
 
+import java.util.Map;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,6 +26,16 @@ public class AuthController {
 
     public AuthController(UserService userService) {
         this.userService = userService;
+    }
+
+    @GetMapping("/config")
+    public ResponseEntity<Map<String, String>> getAuthConfig() {
+        return ResponseEntity.ok(Map.of("googleClientId", userService.getGoogleClientId()));
+    }
+
+    @GetMapping("/google/client-id")
+    public ResponseEntity<Map<String, String>> getGoogleClientId() {
+        return ResponseEntity.ok(Map.of("clientId", userService.getGoogleClientId()));
     }
 
     @PostMapping("/register")
