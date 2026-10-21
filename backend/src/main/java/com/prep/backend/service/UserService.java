@@ -1,11 +1,12 @@
 package com.prep.backend.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
-
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.prep.backend.dto.LoginRequest;
 import com.prep.backend.dto.LoginResponse;
@@ -21,35 +22,35 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.jackson2.JacksonFactory;
-import org.springframework.beans.factory.annotation.Value;
-
 import java.util.Collections;
 
 
 @Service
-
 public class UserService {
+
+    private static final Logger log = LoggerFactory.getLogger(UserService.class);
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-    private final JavaMailSender mailSender;
-    @Value("${google.client-id}")
-private String googleClientId;
+    private final EmailService emailService;
+
+    @Value("${google.client-id:776270035755-ge6mg64nbafmfc1vabsd2a07n1gen4tg.apps.googleusercontent.com}")
+    private String googleClientId = "776270035755-ge6mg64nbafmfc1vabsd2a07n1gen4tg.apps.googleusercontent.com";
 
     @Value("${app.frontend-url:http://localhost:5173}")
-    private String frontendUrl;
+    private String frontendUrl = "http://localhost:5173";
 
     public UserService(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
-            JavaMailSender mailSender
+            EmailService emailService
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
-        this.mailSender = mailSender;
+        this.emailService = emailService;
     }
 
     public User registerUser(RegisterRequest request) {
@@ -250,6 +251,14 @@ public LoginResponse loginWithGoogle(
 
         String email = request.getEmail().trim().toLowerCase();
 
+        if (!emailService.isMailConfigured()) {
+            log.warn("Forgot password requested for {}, but SMTP is not configured on this environment.", email);
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Password reset via email is currently unavailable because SMTP email service is not configured on the server."
+            );
+        }
+
         userRepository.findByEmail(email).ifPresent(user -> {
             String token = java.util.UUID.randomUUID().toString();
 
@@ -263,31 +272,18 @@ public LoginResponse loginWithGoogle(
                     + "/reset-password?token=" + token;
 
             try {
-                SimpleMailMessage message = new SimpleMailMessage();
-                String sender = System.getenv("MAIL_USERNAME");
-                if (sender != null && !sender.isBlank()) {
-                    message.setFrom(sender);
-                }
-                message.setTo(user.getEmail());
-                message.setSubject("Reset your Prep password");
-                message.setText(
-                        "Hello " + user.getFullName() + ",\n\n"
-                        + "We received a request to reset your Prep password.\n\n"
-                        + "Click the link below to choose a new password. "
-                        + "This link expires in 15 minutes and can only be used once.\n\n"
-                        + resetLink + "\n\n"
-                        + "If you did not request this, you can ignore this email."
-                );
-
-                mailSender.send(message);
+                emailService.sendPasswordResetEmail(user.getEmail(), user.getFullName(), resetLink);
             } catch (Exception mailEx) {
-                System.err.println("Notice: SMTP email delivery failed or unconfigured: " + mailEx.getMessage());
-                System.out.println("Generated Reset Password link for " + user.getEmail() + ": " + resetLink);
+                log.error("Failed to send password reset email to {}: {}", user.getEmail(), mailEx.getMessage());
+                throw new ResponseStatusException(
+                        HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Failed to deliver password reset email. Please try again later."
+                );
             }
         });
 
         return new com.prep.backend.dto.MessageResponse(
-                "If an account with this email exists, password reset instructions have been processed."
+                "If an account with this email exists, password reset instructions have been sent."
         );
     }
 
