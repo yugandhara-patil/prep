@@ -1,13 +1,19 @@
 package com.prep.backend.controller;
 
+import java.util.Map;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
+import com.prep.backend.dto.MessageResponse;
 import com.prep.backend.dto.ProfileRequest;
 import com.prep.backend.dto.ProfileResponse;
 import com.prep.backend.service.UserService;
@@ -127,5 +133,41 @@ public class ProfileController {
         } catch (Exception e) {
             return ResponseEntity.notFound().build();
         }
+    }
+
+    // REQUEST account deletion verification email
+    @PostMapping("/delete-request")
+    public ResponseEntity<MessageResponse> requestAccountDeletion(Authentication authentication) {
+        String email = authentication.getName();
+        MessageResponse response = userService.requestAccountDeletion(email);
+        return ResponseEntity.ok(response);
+    }
+
+    // CONFIRM account deletion with verification code or token
+    @PostMapping("/delete-confirm")
+    public ResponseEntity<MessageResponse> confirmAccountDeletion(
+            Authentication authentication,
+            @RequestBody(required = false) Map<String, String> body
+    ) {
+        String email = authentication.getName();
+        String code = body != null ? (body.get("code") != null ? body.get("code") : body.get("token")) : null;
+        MessageResponse response = userService.confirmAccountDeletionForEmail(email, code);
+        return ResponseEntity.ok(response);
+    }
+
+    // CANCEL account deletion
+    @PostMapping("/delete-cancel")
+    public ResponseEntity<MessageResponse> cancelAccountDeletion(Authentication authentication) {
+        String email = authentication.getName();
+        MessageResponse response = userService.cancelAccountDeletion(email);
+        return ResponseEntity.ok(response);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, String>> handleResponseStatusException(ResponseStatusException ex) {
+        String message = ex.getReason() != null ? ex.getReason() : "An error occurred";
+        return ResponseEntity
+                .status(ex.getStatusCode())
+                .body(Map.of("message", message));
     }
 }

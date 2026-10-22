@@ -63,4 +63,11 @@ public class User {
     private String resetPasswordToken;
 
     private LocalDateTime resetPasswordTokenExpiry;
+
+    // Account deletion verification fields
+    private String deleteAccountToken;
+
+    private String deleteAccountCode;
+
+    private LocalDateTime deleteAccountTokenExpiry;
 }

@@ -62,4 +62,30 @@ class EmailServiceTest {
 
         verify(javaMailSender, times(1)).send(any(SimpleMailMessage.class));
     }
+
+    @Test
+    void testEmailServiceWhenMailSenderImplHasGmailHostWithoutCredentialsIsUnconfigured() {
+        JavaMailSenderImpl impl = new JavaMailSenderImpl();
+        impl.setHost("smtp.gmail.com");
+        impl.setUsername("");
+        impl.setPassword("");
+        when(mailSenderProvider.getIfAvailable()).thenReturn(impl);
+
+        EmailService emailService = new EmailService(mailSenderProvider);
+
+        assertFalse(emailService.isMailConfigured());
+    }
+
+    @Test
+    void testEmailServiceWhenMailSenderImplHasHostAndCredentialsIsConfigured() {
+        JavaMailSenderImpl impl = new JavaMailSenderImpl();
+        impl.setHost("smtp.gmail.com");
+        impl.setUsername("prep@example.com");
+        impl.setPassword("app-password-123");
+        when(mailSenderProvider.getIfAvailable()).thenReturn(impl);
+
+        EmailService emailService = new EmailService(mailSenderProvider);
+
+        assertTrue(emailService.isMailConfigured());
+    }
 }

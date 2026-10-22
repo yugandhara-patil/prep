@@ -1,29 +1,40 @@
 package com.prep.backend.service;
 
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-
-import com.prep.backend.dto.LoginRequest;
-import com.prep.backend.dto.LoginResponse;
-import com.prep.backend.dto.ProfileRequest;
-import com.prep.backend.dto.ProfileResponse;
-import com.prep.backend.dto.RegisterRequest;
-import com.prep.backend.entity.Role;
-import com.prep.backend.entity.User;
-import com.prep.backend.repository.UserRepository;
-import com.prep.backend.security.JwtService;
 
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.jackson2.JacksonFactory;
-import java.util.Collections;
+import com.prep.backend.dto.LoginRequest;
+import com.prep.backend.dto.LoginResponse;
+import com.prep.backend.dto.MessageResponse;
+import com.prep.backend.dto.ProfileRequest;
+import com.prep.backend.dto.ProfileResponse;
+import com.prep.backend.dto.RegisterRequest;
+import com.prep.backend.entity.Interview;
+import com.prep.backend.entity.InterviewAnswer;
+import com.prep.backend.entity.Role;
+import com.prep.backend.entity.User;
+import com.prep.backend.repository.InterviewAnswerRepository;
+import com.prep.backend.repository.InterviewRepository;
+import com.prep.backend.repository.UserRepository;
+import com.prep.backend.security.JwtService;
 
 
 @Service
@@ -35,6 +46,8 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final EmailService emailService;
+    private final InterviewRepository interviewRepository;
+    private final InterviewAnswerRepository interviewAnswerRepository;
 
     @Value("${google.client-id:776270035755-ge6mg64nbafmfc1vabsd2a07n1gen4tg.apps.googleusercontent.com}")
     private String googleClientId = "776270035755-ge6mg64nbafmfc1vabsd2a07n1gen4tg.apps.googleusercontent.com";
@@ -42,16 +55,30 @@ public class UserService {
     @Value("${app.frontend-url:http://localhost:5173}")
     private String frontendUrl = "http://localhost:5173";
 
+    @Autowired
+    public UserService(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            JwtService jwtService,
+            EmailService emailService,
+            InterviewRepository interviewRepository,
+            InterviewAnswerRepository interviewAnswerRepository
+    ) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
+        this.emailService = emailService;
+        this.interviewRepository = interviewRepository;
+        this.interviewAnswerRepository = interviewAnswerRepository;
+    }
+
     public UserService(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             EmailService emailService
     ) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.jwtService = jwtService;
-        this.emailService = emailService;
+        this(userRepository, passwordEncoder, jwtService, emailService, null, null);
     }
 
     public String getGoogleClientId() {
@@ -341,5 +368,123 @@ public LoginResponse loginWithGoogle(
                 updated.getPortfolio(),
                 updated.getProfilePhotoUrl()
         );
+    }
+
+    @Transactional
+    public MessageResponse requestAccountDeletion(String email) {
+        String normalizedEmail = email != null ? email.trim().toLowerCase() : "";
+        User user = userRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        if (!emailService.isMailConfigured()) {
+            log.warn("Account deletion verification email requested for {}, but SMTP is not configured.", normalizedEmail);
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Account deletion verification email is currently unavailable because SMTP email service is not configured on the server. Please configure MAIL_USERNAME and MAIL_APP_PASSWORD."
+            );
+        }
+
+        String token = UUID.randomUUID().toString();
+        String code = String.format("%06d", new SecureRandom().nextInt(1000000));
+
+        user.setDeleteAccountToken(token);
+        user.setDeleteAccountCode(code);
+        user.setDeleteAccountTokenExpiry(LocalDateTime.now().plusMinutes(15));
+        userRepository.save(user);
+
+        String verificationLink = frontendUrl.replaceAll("/+$", "")
+                + "/verify-delete-account?token=" + token;
+
+        try {
+            emailService.sendAccountDeletionVerificationEmail(user.getEmail(), user.getFullName(), verificationLink, code);
+        } catch (Exception ex) {
+            log.error("Failed to deliver account deletion email to {}: {}", user.getEmail(), ex.getMessage());
+            String errorReason = "Failed to deliver account deletion verification email. ";
+            if (ex instanceof org.springframework.mail.MailAuthenticationException
+                    || (ex.getCause() != null && ex.getCause().getClass().getName().contains("AuthenticationFailedException"))) {
+                errorReason += "SMTP authentication failed. Please verify your MAIL_USERNAME and MAIL_APP_PASSWORD credentials.";
+            } else {
+                errorReason += "Please check your SMTP email configuration or try again later.";
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, errorReason);
+        }
+
+        return new MessageResponse("Verification email sent to your registered email address.");
+    }
+
+    @Transactional
+    public MessageResponse confirmAccountDeletion(String tokenOrCode) {
+        if (tokenOrCode == null || tokenOrCode.trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Verification token or code is required");
+        }
+
+        String cleaned = tokenOrCode.trim();
+
+        User user = userRepository.findByDeleteAccountToken(cleaned)
+                .or(() -> userRepository.findByDeleteAccountCode(cleaned))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired deletion verification code or link."));
+
+        if (user.getDeleteAccountTokenExpiry() == null || user.getDeleteAccountTokenExpiry().isBefore(LocalDateTime.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Deletion verification has expired. Please request a new verification email.");
+        }
+
+        deleteUserRecords(user);
+        return new MessageResponse("Account deleted successfully.");
+    }
+
+    @Transactional
+    public MessageResponse confirmAccountDeletionForEmail(String email, String tokenOrCode) {
+        if (tokenOrCode == null || tokenOrCode.trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Verification token or code is required");
+        }
+
+        String cleaned = tokenOrCode.trim();
+        String normalizedEmail = email != null ? email.trim().toLowerCase() : "";
+        User user = userRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        boolean tokenMatch = cleaned.equals(user.getDeleteAccountToken());
+        boolean codeMatch = cleaned.equals(user.getDeleteAccountCode());
+
+        if (!tokenMatch && !codeMatch) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid deletion verification code or link.");
+        }
+
+        if (user.getDeleteAccountTokenExpiry() == null || user.getDeleteAccountTokenExpiry().isBefore(LocalDateTime.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Deletion verification has expired. Please request a new verification email.");
+        }
+
+        deleteUserRecords(user);
+        return new MessageResponse("Account deleted successfully.");
+    }
+
+    private void deleteUserRecords(User user) {
+        if (interviewRepository != null && interviewAnswerRepository != null) {
+            List<Interview> interviews = interviewRepository.findByUserOrderByStartedAtDesc(user);
+            if (interviews != null) {
+                for (Interview interview : interviews) {
+                    List<InterviewAnswer> answers = interviewAnswerRepository.findByInterviewOrderByIdAsc(interview);
+                    if (answers != null && !answers.isEmpty()) {
+                        interviewAnswerRepository.deleteAll(answers);
+                    }
+                }
+                interviewRepository.deleteAll(interviews);
+            }
+        }
+
+        userRepository.delete(user);
+        log.info("Permanently deleted user account with email: {}", user.getEmail());
+    }
+
+    @Transactional
+    public MessageResponse cancelAccountDeletion(String email) {
+        String normalizedEmail = email != null ? email.trim().toLowerCase() : "";
+        userRepository.findByEmail(normalizedEmail).ifPresent(user -> {
+            user.setDeleteAccountToken(null);
+            user.setDeleteAccountCode(null);
+            user.setDeleteAccountTokenExpiry(null);
+            userRepository.save(user);
+        });
+        return new MessageResponse("Account deletion cancelled.");
     }
 }
