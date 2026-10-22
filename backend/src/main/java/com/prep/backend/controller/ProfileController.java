@@ -4,6 +4,7 @@ import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -135,31 +136,19 @@ public class ProfileController {
         }
     }
 
-    // REQUEST account deletion verification email
-    @PostMapping("/delete-request")
-    public ResponseEntity<MessageResponse> requestAccountDeletion(Authentication authentication) {
+    // DELETE logged-in user's account permanently
+    @DeleteMapping({"", "/delete"})
+    public ResponseEntity<MessageResponse> deleteAccount(Authentication authentication) {
         String email = authentication.getName();
-        MessageResponse response = userService.requestAccountDeletion(email);
+        MessageResponse response = userService.deleteAccount(email);
         return ResponseEntity.ok(response);
     }
 
-    // CONFIRM account deletion with verification code or token
-    @PostMapping("/delete-confirm")
-    public ResponseEntity<MessageResponse> confirmAccountDeletion(
-            Authentication authentication,
-            @RequestBody(required = false) Map<String, String> body
-    ) {
+    // Alternative POST endpoint for deleting account
+    @PostMapping("/delete")
+    public ResponseEntity<MessageResponse> deleteAccountPost(Authentication authentication) {
         String email = authentication.getName();
-        String code = body != null ? (body.get("code") != null ? body.get("code") : body.get("token")) : null;
-        MessageResponse response = userService.confirmAccountDeletionForEmail(email, code);
-        return ResponseEntity.ok(response);
-    }
-
-    // CANCEL account deletion
-    @PostMapping("/delete-cancel")
-    public ResponseEntity<MessageResponse> cancelAccountDeletion(Authentication authentication) {
-        String email = authentication.getName();
-        MessageResponse response = userService.cancelAccountDeletion(email);
+        MessageResponse response = userService.deleteAccount(email);
         return ResponseEntity.ok(response);
     }
 

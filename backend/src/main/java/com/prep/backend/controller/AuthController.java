@@ -87,15 +87,6 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/delete-account/confirm")
-    public ResponseEntity<com.prep.backend.dto.MessageResponse> confirmAccountDeletion(
-            @RequestBody(required = false) Map<String, String> body
-    ) {
-        String tokenOrCode = body != null ? (body.get("token") != null ? body.get("token") : body.get("code")) : null;
-        com.prep.backend.dto.MessageResponse response = userService.confirmAccountDeletion(tokenOrCode);
-        return ResponseEntity.ok(response);
-    }
-
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, String>> handleResponseStatusException(ResponseStatusException ex) {
         String message = ex.getReason() != null ? ex.getReason() : "An error occurred";

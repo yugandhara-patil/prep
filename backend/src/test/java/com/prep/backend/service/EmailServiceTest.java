@@ -88,4 +88,22 @@ class EmailServiceTest {
 
         assertTrue(emailService.isMailConfigured());
     }
+
+    @Test
+    void testEmailServiceWhenBeanNotProvidedByAutoConfigButResolvedPropertiesHaveCredentials() {
+        when(mailSenderProvider.getIfAvailable()).thenReturn(null);
+
+        EmailService emailService = new EmailService(
+                mailSenderProvider,
+                "smtp.gmail.com",
+                587,
+                "deployed@example.com",
+                "resolved-password",
+                true,
+                true,
+                true
+        );
+
+        assertTrue(emailService.isMailConfigured());
+    }
 }

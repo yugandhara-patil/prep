@@ -371,88 +371,10 @@ public LoginResponse loginWithGoogle(
     }
 
     @Transactional
-    public MessageResponse requestAccountDeletion(String email) {
+    public MessageResponse deleteAccount(String email) {
         String normalizedEmail = email != null ? email.trim().toLowerCase() : "";
         User user = userRepository.findByEmail(normalizedEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
-
-        if (!emailService.isMailConfigured()) {
-            log.warn("Account deletion verification email requested for {}, but SMTP is not configured.", normalizedEmail);
-            throw new ResponseStatusException(
-                    HttpStatus.SERVICE_UNAVAILABLE,
-                    "Account deletion verification email is currently unavailable because SMTP email service is not configured on the server. Please configure MAIL_USERNAME and MAIL_APP_PASSWORD."
-            );
-        }
-
-        String token = UUID.randomUUID().toString();
-        String code = String.format("%06d", new SecureRandom().nextInt(1000000));
-
-        user.setDeleteAccountToken(token);
-        user.setDeleteAccountCode(code);
-        user.setDeleteAccountTokenExpiry(LocalDateTime.now().plusMinutes(15));
-        userRepository.save(user);
-
-        String verificationLink = frontendUrl.replaceAll("/+$", "")
-                + "/verify-delete-account?token=" + token;
-
-        try {
-            emailService.sendAccountDeletionVerificationEmail(user.getEmail(), user.getFullName(), verificationLink, code);
-        } catch (Exception ex) {
-            log.error("Failed to deliver account deletion email to {}: {}", user.getEmail(), ex.getMessage());
-            String errorReason = "Failed to deliver account deletion verification email. ";
-            if (ex instanceof org.springframework.mail.MailAuthenticationException
-                    || (ex.getCause() != null && ex.getCause().getClass().getName().contains("AuthenticationFailedException"))) {
-                errorReason += "SMTP authentication failed. Please verify your MAIL_USERNAME and MAIL_APP_PASSWORD credentials.";
-            } else {
-                errorReason += "Please check your SMTP email configuration or try again later.";
-            }
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, errorReason);
-        }
-
-        return new MessageResponse("Verification email sent to your registered email address.");
-    }
-
-    @Transactional
-    public MessageResponse confirmAccountDeletion(String tokenOrCode) {
-        if (tokenOrCode == null || tokenOrCode.trim().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Verification token or code is required");
-        }
-
-        String cleaned = tokenOrCode.trim();
-
-        User user = userRepository.findByDeleteAccountToken(cleaned)
-                .or(() -> userRepository.findByDeleteAccountCode(cleaned))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired deletion verification code or link."));
-
-        if (user.getDeleteAccountTokenExpiry() == null || user.getDeleteAccountTokenExpiry().isBefore(LocalDateTime.now())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Deletion verification has expired. Please request a new verification email.");
-        }
-
-        deleteUserRecords(user);
-        return new MessageResponse("Account deleted successfully.");
-    }
-
-    @Transactional
-    public MessageResponse confirmAccountDeletionForEmail(String email, String tokenOrCode) {
-        if (tokenOrCode == null || tokenOrCode.trim().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Verification token or code is required");
-        }
-
-        String cleaned = tokenOrCode.trim();
-        String normalizedEmail = email != null ? email.trim().toLowerCase() : "";
-        User user = userRepository.findByEmail(normalizedEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
-
-        boolean tokenMatch = cleaned.equals(user.getDeleteAccountToken());
-        boolean codeMatch = cleaned.equals(user.getDeleteAccountCode());
-
-        if (!tokenMatch && !codeMatch) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid deletion verification code or link.");
-        }
-
-        if (user.getDeleteAccountTokenExpiry() == null || user.getDeleteAccountTokenExpiry().isBefore(LocalDateTime.now())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Deletion verification has expired. Please request a new verification email.");
-        }
 
         deleteUserRecords(user);
         return new MessageResponse("Account deleted successfully.");
@@ -474,17 +396,5 @@ public LoginResponse loginWithGoogle(
 
         userRepository.delete(user);
         log.info("Permanently deleted user account with email: {}", user.getEmail());
-    }
-
-    @Transactional
-    public MessageResponse cancelAccountDeletion(String email) {
-        String normalizedEmail = email != null ? email.trim().toLowerCase() : "";
-        userRepository.findByEmail(normalizedEmail).ifPresent(user -> {
-            user.setDeleteAccountToken(null);
-            user.setDeleteAccountCode(null);
-            user.setDeleteAccountTokenExpiry(null);
-            userRepository.save(user);
-        });
-        return new MessageResponse("Account deletion cancelled.");
     }
 }

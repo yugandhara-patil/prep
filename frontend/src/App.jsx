@@ -9,7 +9,6 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
-import VerifyDeleteAccount from "./pages/VerifyDeleteAccount";
 import Home from "./pages/Home";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import Profile from "./pages/Profile";
@@ -50,11 +49,6 @@ function App() {
         <Route
           path="/reset-password"
           element={<ResetPassword />}
-        />
-
-        <Route
-          path="/verify-delete-account"
-          element={<VerifyDeleteAccount />}
         />
 
         <Route
