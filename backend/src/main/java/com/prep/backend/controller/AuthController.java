@@ -2,13 +2,16 @@ package com.prep.backend.controller;
 
 import java.util.Map;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.prep.backend.dto.LoginRequest;
 import com.prep.backend.dto.LoginResponse;
@@ -82,5 +85,20 @@ public class AuthController {
     ) {
         com.prep.backend.dto.MessageResponse response = userService.resetPassword(request);
         return ResponseEntity.ok(response);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, String>> handleResponseStatusException(ResponseStatusException ex) {
+        String message = ex.getReason() != null ? ex.getReason() : "An error occurred";
+        return ResponseEntity
+                .status(ex.getStatusCode())
+                .body(Map.of("message", message));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, String>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of("message", "Email is already registered"));
     }
 }

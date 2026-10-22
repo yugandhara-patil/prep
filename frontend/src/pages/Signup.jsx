@@ -4,7 +4,13 @@ import { User, Mail, Lock, Eye, EyeOff, AlertCircle, Sparkles, Mic, Award, Arrow
 import axios from "axios";
 import authHeroImage from "../assets/auth-hero.jpg";
 import PrepLogo from "../components/PrepLogo";
-import { getGoogleClientId } from "../utils/googleAuth";
+import {
+  getGoogleClientId,
+  loadGsiScript,
+  initGoogleIdentity,
+  renderGoogleButton,
+  detachGoogleCallback,
+} from "../utils/googleAuth";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -84,106 +90,76 @@ export default function Signup() {
 
       handleSuccessfulAuth(loginRes.data);
     } catch (error) {
-      console.error("Signup error:", error);
-      setErrorMessage(
-        error.response?.data?.message || "Failed to create account. Please try again."
-      );
+      if (error.response?.status === 409) {
+        setErrorMessage(
+          error.response?.data?.message
+            ? `${error.response.data.message}. Please sign in or use a different email.`
+            : "An account with this email already exists. Please sign in or use a different email."
+        );
+      } else {
+        console.error("Signup error:", error);
+        setErrorMessage(
+          error.response?.data?.message || "Failed to create account. Please try again."
+        );
+      }
     } finally {
       setLoading(false);
     }
   }
 
   const googleButtonRef = useRef(null);
-  const gisInitializedRef = useRef(false);
   const [googleAvailable, setGoogleAvailable] = useState(false);
 
-  // Initialize Google Identity Services on mount using resolved Client ID
+  // Initialize Google Identity Services safely using singleton manager
   useEffect(() => {
     let isCancelled = false;
-    let timer;
 
-    async function initGis() {
-      const googleClientId = await getGoogleClientId();
-      if (isCancelled || !googleClientId) {
-        if (!googleClientId) {
-          console.warn("Google Client ID not configured.");
-        }
+    const handleGoogleCredential = async (res) => {
+      if (!res?.credential) return;
+      try {
+        setGoogleLoading(true);
+        setErrorMessage("");
+        setInfoMessage("");
+        const response = await axios.post(
+          `${import.meta.env.VITE_API_URL || ""}/api/auth/google`,
+          { idToken: res.credential }
+        );
+        handleSuccessfulAuth(response.data);
+      } catch (err) {
+        console.error("Google authentication error:", err);
+        setErrorMessage(
+          err.response?.data?.message || "Failed to authenticate with Google. Please try again or register with email."
+        );
+      } finally {
+        setGoogleLoading(false);
+      }
+    };
+
+    async function setupGoogle() {
+      const googleClientId = getGoogleClientId();
+      if (!googleClientId) {
         return;
       }
 
-      const initGoogle = () => {
-        if (!window.google?.accounts?.id || !googleButtonRef.current) {
-          return false;
-        }
+      await loadGsiScript();
+      if (isCancelled) return;
 
-        try {
-          if (!gisInitializedRef.current) {
-            window.google.accounts.id.initialize({
-              client_id: googleClientId,
-              callback: async (res) => {
-                if (!res?.credential) return;
-                try {
-                  setGoogleLoading(true);
-                  setErrorMessage("");
-                  setInfoMessage("");
-                  const response = await axios.post(
-                    `${import.meta.env.VITE_API_URL || ""}/api/auth/google`,
-                    { idToken: res.credential }
-                  );
-                  handleSuccessfulAuth(response.data);
-                } catch (err) {
-                  console.error("Google authentication error:", err);
-                  setErrorMessage(
-                    err.response?.data?.message || "Failed to authenticate with Google. Please try again or register with email."
-                  );
-                } finally {
-                  setGoogleLoading(false);
-                }
-              },
-              auto_select: false,
-              cancel_on_tap_outside: true,
-              itp_support: true,
-            });
-            gisInitializedRef.current = true;
+      const initialized = initGoogleIdentity(googleClientId, handleGoogleCredential);
+      if (initialized && googleButtonRef.current) {
+        setGoogleAvailable(true);
+        setTimeout(() => {
+          if (!isCancelled && googleButtonRef.current) {
+            renderGoogleButton(googleButtonRef.current);
           }
-
-          const container = googleButtonRef.current;
-          container.innerHTML = "";
-          const containerWidth = Math.min(Math.max(container.offsetWidth || 340, 240), 400);
-
-          window.google.accounts.id.renderButton(container, {
-            theme: "outline",
-            size: "large",
-            text: "continue_with",
-            shape: "rectangular",
-            logo_alignment: "left",
-            width: containerWidth,
-          });
-
-          setGoogleAvailable(true);
-          return true;
-        } catch (err) {
-          console.warn("Failed to initialize Google Sign-In:", err);
-          return false;
-        }
-      };
-
-      if (!initGoogle()) {
-        let attempts = 0;
-        timer = setInterval(() => {
-          attempts++;
-          if (initGoogle() || attempts > 25) {
-            clearInterval(timer);
-          }
-        }, 200);
+        }, 0);
       }
     }
 
-    initGis();
+    setupGoogle();
 
     return () => {
       isCancelled = true;
-      if (timer) clearInterval(timer);
+      detachGoogleCallback(handleGoogleCredential);
     };
   }, []);
 

@@ -3,6 +3,7 @@ package com.prep.backend.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -59,14 +60,16 @@ public class UserService {
 
     public User registerUser(RegisterRequest request) {
 
-        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-            throw new RuntimeException("Email is already registered");
+        String email = request.getEmail() != null ? request.getEmail().trim().toLowerCase() : "";
+
+        if (userRepository.findByEmail(email).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered");
         }
 
         User user = new User();
 
-        user.setFullName(request.getFullName());
-        user.setEmail(request.getEmail());
+        user.setFullName(request.getFullName() != null ? request.getFullName().trim() : "");
+        user.setEmail(email);
 
         user.setPassword(
                 passwordEncoder.encode(request.getPassword())
@@ -74,7 +77,12 @@ public class UserService {
 
         user.setRole(Role.USER);
 
-        return userRepository.save(user);
+        try {
+            return userRepository.save(user);
+        } catch (DataIntegrityViolationException ex) {
+            log.warn("Duplicate email registration conflict for email {}: {}", email, ex.getMessage());
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered");
+        }
     }
 
     public LoginResponse loginUser(LoginRequest request) {
